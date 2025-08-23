@@ -21,6 +21,8 @@ async function bootstrap() {
     }),
   );
 
+  app.setGlobalPrefix('api');
+
   await app.listen(4000);
   console.log('🚀 NestJS server running on http://localhost:4000');
 }
