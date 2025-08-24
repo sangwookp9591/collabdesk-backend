@@ -1,23 +1,69 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+// auth.controller.ts
+import {
+  Controller,
+  Post,
+  Body,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+  ValidationPipe,
+  HttpStatus,
+  HttpCode,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthService } from './auth.service';
-import { RegisterDto } from './dto/register.dto';
+import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private authService: AuthService) {}
 
-  @Post('register')
-  async register(@Body() registerDto: RegisterDto) {
-    return this.authService.register(registerDto);
+  @Post('signup')
+  @UseInterceptors(
+    FileInterceptor('profileImage', {
+      limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB
+      },
+      fileFilter: (req, file, callback) => {
+        if (!file) {
+          return callback(null, true); // 파일 없어도 허용
+        }
+
+        if (!file.mimetype.match(/^image\/(jpeg|jpg|png|gif|webp)$/)) {
+          return callback(
+            new BadRequestException(
+              'JPG, PNG, GIF, WebP 파일만 업로드 가능합니다.',
+            ),
+            false,
+          );
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  async signup(
+    @Body(ValidationPipe) signupDto: SignupDto,
+    @UploadedFile() profileImage?: Express.Multer.File,
+  ) {
+    const user = await this.authService.signup(signupDto, profileImage);
+
+    return {
+      success: true,
+      message: '회원가입이 완료되었습니다.',
+      data: user,
+    };
   }
 
-  @Post('validate')
+  @Post('login')
   @HttpCode(HttpStatus.OK)
-  async validateUser(@Body() loginDto: LoginDto) {
-    return await this.authService.validateUser(
-      loginDto.email,
-      loginDto.password,
-    );
+  async login(@Body(ValidationPipe) loginDto: LoginDto) {
+    const user = await this.authService.login(loginDto);
+
+    return {
+      success: true,
+      message: '로그인에 성공했습니다.',
+      data: user,
+    };
   }
 }

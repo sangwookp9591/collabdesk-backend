@@ -1,103 +1,131 @@
+// auth.service.ts
 import {
-  ConflictException,
   Injectable,
-  UnauthorizedException,
+  BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
-import { RegisterDto } from './dto/register.dto';
-import * as bcrypt from 'bcryptjs';
-import { UserStatus } from 'generated/prisma';
+
+import * as bcrypt from 'bcrypt';
+import { AuthResponseDto } from './dto/auth-response.dto';
+import { LoginDto } from './dto/login.dto';
+import { SignupDto } from './dto/signup.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { SupabaseService } from 'src/supabase/supabase.service';
 
 @Injectable()
 export class AuthService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private supabaseService: SupabaseService,
+  ) {}
 
-  async register(registerDto: RegisterDto) {
-    const { name, email, password } = registerDto;
+  async signup(
+    signupDto: SignupDto,
+    profileImage?: Express.Multer.File,
+  ): Promise<AuthResponseDto> {
+    const { email, name, password } = signupDto;
 
-    // 이메일 중복 체크
+    // 이메일 중복 확인
     const existingUser = await this.prisma.user.findUnique({
       where: { email },
     });
 
     if (existingUser) {
-      throw new ConflictException('이미 존재하는 이메일입니다.');
+      throw new ConflictException('이미 사용 중인 이메일입니다.');
     }
 
-    // 비밀번호 해싱
-    const hashedPassword = await bcrypt.hash(password, 12);
+    try {
+      // 비밀번호 해시화
+      const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 사용자 생성
-    const user = await this.prisma.user.create({
-      data: {
-        name,
-        email,
-        password: hashedPassword,
-        status: UserStatus.OFFLINE,
-        lastActiveAt: new Date(),
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        imageUrl: true,
-        status: true,
-        createdAt: true,
-      },
-    });
+      // 먼저 사용자 생성
+      const newUser = await this.prisma.user.create({
+        data: {
+          email,
+          name,
+          password: hashedPassword,
+          status: 'ONLINE',
+        },
+      });
 
-    return { message: '회원가입이 완료되었습니다.', user };
+      let finalUser = newUser;
+
+      // 프로필 이미지 처리
+      if (profileImage) {
+        try {
+          const uploadResult = await this.supabaseService.uploadProfileImage(
+            profileImage,
+            newUser.id,
+          );
+
+          // 사용자 정보에 이미지 URL과 경로 업데이트
+          finalUser = await this.prisma.user.update({
+            where: { id: newUser.id },
+            data: {
+              profileImageUrl: uploadResult.url,
+              profileImagePath: uploadResult.path,
+            },
+          });
+        } catch (imageError) {
+          // 이미지 업로드 실패해도 회원가입은 성공
+          console.error('프로필 이미지 업로드 실패:', imageError);
+        }
+      }
+
+      return this.formatUserResponse(finalUser);
+    } catch (error) {
+      if (error instanceof ConflictException) {
+        throw error;
+      }
+      throw new BadRequestException(
+        `회원가입에 실패했습니다: ${error.message}`,
+      );
+    }
   }
 
-  async validateUser(email: string, password: string) {
+  async login(loginDto: LoginDto): Promise<AuthResponseDto> {
+    const { email, password } = loginDto;
+
+    // 사용자 찾기
     const user = await this.prisma.user.findUnique({
       where: { email },
     });
 
     if (!user || !user.password) {
-      throw new UnauthorizedException(
+      throw new BadRequestException(
         '이메일 또는 비밀번호가 올바르지 않습니다.',
       );
     }
 
+    // 비밀번호 확인
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      throw new UnauthorizedException(
+      throw new BadRequestException(
         '이메일 또는 비밀번호가 올바르지 않습니다.',
       );
     }
 
-    // 로그인 시 상태를 ONLINE으로 업데이트
-    await this.prisma.user.update({
+    // 사용자 상태를 ONLINE으로 업데이트
+    const updatedUser = await this.prisma.user.update({
       where: { id: user.id },
       data: {
-        status: UserStatus.ONLINE,
+        status: 'ONLINE',
         lastActiveAt: new Date(),
       },
     });
 
-    // 비밀번호 제외하고 반환
-    return {
-      ...user,
-      status: UserStatus.ONLINE,
-      lastActiveAt: new Date(),
-    };
+    return this.formatUserResponse(updatedUser);
   }
 
-  async findUserByEmail(email: string) {
-    return await this.prisma.user.findUnique({
-      where: { email },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        imageUrl: true,
-        status: true,
-        lastActiveAt: true,
-        lastActiveWorkspaceId: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+  private formatUserResponse(user: any): AuthResponseDto {
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      profileImageUrl: user.profileImageUrl,
+      status: user.status,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
   }
 }
