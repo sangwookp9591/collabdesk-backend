@@ -21,8 +21,9 @@ export class SupabaseService {
     const fileName = `${userId}-profile-${Date.now()}.${fileExt}`;
     const filePath = `profiles/${fileName}`;
 
+    console.log('filePath : ', filePath);
     const { data, error } = await this.supabase.storage
-      .from('avatars')
+      .from('collabdesk-bucket')
       .upload(filePath, file.buffer, {
         contentType: file.mimetype,
         upsert: true,
@@ -34,7 +35,7 @@ export class SupabaseService {
     }
 
     const { data: urlData } = this.supabase.storage
-      .from('avatars')
+      .from('collabdesk-bucket')
       .getPublicUrl(filePath);
 
     return {
@@ -47,7 +48,7 @@ export class SupabaseService {
     if (!path) return;
 
     const { error } = await this.supabase.storage
-      .from('avatars')
+      .from('collabdesk-bucket')
       .remove([path]);
 
     if (error) {
