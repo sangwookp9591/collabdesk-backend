@@ -27,7 +27,7 @@ export class AuthController {
       },
       fileFilter: (req, file, callback) => {
         if (!file) {
-          return callback(null, true); // 파일 없어도 허용
+          return callback(null, true);
         }
 
         if (!file.mimetype.match(/^image\/(jpeg|jpg|png|gif|webp)$/)) {
@@ -43,9 +43,31 @@ export class AuthController {
     }),
   )
   async signup(
-    @Body(ValidationPipe) signupDto: SignupDto,
+    @Body('email') email: string,
+    @Body('name') name: string,
+    @Body('password') password: string,
+    @Body('confirmPassword') confirmPassword: string,
     @UploadedFile() profileImage?: Express.Multer.File,
   ) {
+    console.log('signup called:', {
+      email,
+      name,
+      password,
+      confirmPassword,
+      profileImage,
+    });
+
+    // 수동으로 DTO 생성 및 검증
+    const signupDto = new SignupDto();
+    signupDto.email = email;
+    signupDto.name = name;
+    signupDto.password = password;
+
+    // 수동 검증 (또는 class-validator 사용)
+    if (!email || !name || !password || !confirmPassword) {
+      throw new BadRequestException('필수 필드가 누락되었습니다.');
+    }
+
     const user = await this.authService.signup(signupDto, profileImage);
 
     return {
