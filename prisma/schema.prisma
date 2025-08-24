@@ -13,7 +13,8 @@ model User {
   email                 String     @unique
   name                  String?
   password              String?
-  imageUrl              String?
+  profileImageUrl       String?    // 공개 URL
+  profileImagePath      String?    // 스토리지 경로 (삭제용)
   status                UserStatus @default(OFFLINE)
   lastActiveAt          DateTime   @default(now())
   lastActiveWorkspaceId String?
