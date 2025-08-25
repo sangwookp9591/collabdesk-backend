@@ -5,6 +5,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { SwaggerTheme, SwaggerThemeNameEnum } from 'swagger-themes';
+import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -28,6 +29,7 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
+  app.use(cookieParser());
   //Swagger
   const config = new DocumentBuilder()
     .setTitle('CollabDesk API')
