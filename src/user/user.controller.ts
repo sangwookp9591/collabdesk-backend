@@ -14,7 +14,7 @@ export class UserController {
 
     if (!userId) {
       return {
-        ok: false,
+        success: false,
         message: '세션 정보 없음.',
         data: { lastActiveWorkspaceId: null },
       };
@@ -22,7 +22,7 @@ export class UserController {
 
     const user = await this.userService.findOne(userId);
     return {
-      ok: true,
+      success: true,
       message: '유저조회 성공',
       data: { user: user },
     };
@@ -34,7 +34,7 @@ export class UserController {
 
     if (!userId) {
       return {
-        ok: false,
+        success: false,
         message: '세션 정보 없음.',
         data: { lastActiveWorkspaceId: null },
       };
@@ -42,7 +42,7 @@ export class UserController {
 
     const workspaces = await this.userService.userWorkspace(userId);
     return {
-      ok: true,
+      success: true,
       message: '워크스페이스 목록 조회 성공',
       data: { workspaces: workspaces },
     };
@@ -54,14 +54,14 @@ export class UserController {
 
     if (!userId) {
       return {
-        ok: false,
+        success: false,
         message: '세션 정보 없음.',
         data: { lastActiveWorkspaceId: null },
       };
     }
     const lastWorkSpace = await this.userService.lastWorkspace(userId);
     return {
-      ok: true,
+      success: true,
       message: '마지막 워크스페이스 조회 성공',
       data: { lastActiveWorkspaceId: lastWorkSpace?.lastActiveWorkspaceId },
     };
