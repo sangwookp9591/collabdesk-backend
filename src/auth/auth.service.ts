@@ -34,51 +34,44 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    try {
-      // Prisma 트랜잭션 사용
-      const result = await this.prisma.$transaction(async (tx) => {
-        // 1. 사용자 생성
-        const newUser = await tx.user.create({
-          data: {
-            email,
-            name,
-            password: hashedPassword,
-            status: 'ONLINE',
-          },
-        });
-
-        let finalUser = newUser;
-
-        // 2. 프로필 이미지 처리 (이미지 업로드 실패 시 트랜잭션 롤백)
-        if (profileImage) {
-          const uploadResult = await this.supabaseService.uploadProfileImage(
-            profileImage,
-            newUser.id,
-          );
-
-          if (!uploadResult.url || !uploadResult.path) {
-            throw new BadRequestException('프로필 이미지 업로드 실패');
-          }
-
-          finalUser = await tx.user.update({
-            where: { id: newUser.id },
-            data: {
-              profileImageUrl: uploadResult.url,
-              profileImagePath: uploadResult.path,
-            },
-          });
-        }
-
-        return finalUser;
+    // Prisma 트랜잭션 사용
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 1. 사용자 생성
+      const newUser = await tx.user.create({
+        data: {
+          email,
+          name,
+          password: hashedPassword,
+          status: 'ONLINE',
+        },
       });
 
-      return this.formatUserResponse(result);
-    } catch (error) {
-      if (error instanceof ConflictException) throw error;
-      throw new BadRequestException(
-        `회원가입에 실패했습니다: ${error.message}`,
-      );
-    }
+      let finalUser = newUser;
+
+      // 2. 프로필 이미지 처리 (이미지 업로드 실패 시 트랜잭션 롤백)
+      if (profileImage) {
+        const uploadResult = await this.supabaseService.uploadProfileImage(
+          profileImage,
+          newUser.id,
+        );
+
+        if (!uploadResult.url || !uploadResult.path) {
+          throw new BadRequestException('프로필 이미지 업로드 실패');
+        }
+
+        finalUser = await tx.user.update({
+          where: { id: newUser.id },
+          data: {
+            profileImageUrl: uploadResult.url,
+            profileImagePath: uploadResult.path,
+          },
+        });
+      }
+
+      return finalUser;
+    });
+
+    return this.formatUserResponse(result);
   }
 
   async login(loginDto: LoginDto): Promise<AuthResponseDto> {
