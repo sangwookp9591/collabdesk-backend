@@ -3,6 +3,8 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SwaggerTheme, SwaggerThemeNameEnum } from 'swagger-themes';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -25,6 +27,22 @@ async function bootstrap() {
   app.useGlobalFilters(new PrismaExceptionFilter());
 
   app.setGlobalPrefix('api');
+
+  //Swagger
+  const config = new DocumentBuilder()
+    .setTitle('CollabDesk API')
+    .setDescription('CollabDesk API 문서입니다')
+    .setVersion('0.0.1')
+    .addBearerAuth() // JWT 인증 추가 가능
+    .build();
+
+  const document = SwaggerModule.createDocument(app, config);
+  const theme = new SwaggerTheme();
+  const options = {
+    explorer: false,
+    customCss: theme.getBuffer(SwaggerThemeNameEnum.ONE_DARK),
+  };
+  SwaggerModule.setup('api', app, document, options); // /api 경로에서 Swagger UI 확인 가능
 
   await app.listen(4000);
   console.log('🚀 NestJS server running on http://localhost:4000');
