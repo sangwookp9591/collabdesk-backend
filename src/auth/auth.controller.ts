@@ -9,6 +9,7 @@ import {
   ValidationPipe,
   HttpStatus,
   HttpCode,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthService } from './auth.service';
@@ -71,5 +72,21 @@ export class AuthController {
       message: '로그인에 성공했습니다.',
       data: user,
     };
+  }
+
+  @Post('refresh')
+  async refreshTokens(@Body('refreshToken') refreshToken: string) {
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token required');
+    }
+    return this.authService.refreshTokens(refreshToken);
+  }
+
+  @Post('logout')
+  async logout(@Body('refreshToken') refreshToken: string) {
+    if (refreshToken) {
+      await this.authService.logout(refreshToken);
+    }
+    return { message: 'Logged out successfully' };
   }
 }

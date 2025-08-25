@@ -3,6 +3,7 @@ import {
   Injectable,
   BadRequestException,
   ConflictException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { AuthResponseDto } from './dto/auth-response.dto';
@@ -138,5 +139,48 @@ export class AuthService {
       },
       ...tokens,
     };
+  }
+
+  // 토큰 리프레시
+  async refreshTokens(refreshToken: string) {
+    try {
+      const payload =
+        await this.jwtTokenService.verifyRefreshToken(refreshToken);
+
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+      });
+
+      if (!user) {
+        throw new UnauthorizedException('User not found');
+      }
+
+      // 기존 리프레시 토큰 삭제
+      await this.jwtTokenService.revokeRefreshToken(refreshToken);
+
+      // 새 토큰 발급
+      const tokens = await this.jwtTokenService.generateTokenPair({
+        id: user?.id,
+        email: user?.email,
+        name: user?.name || '',
+      });
+
+      return {
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          profileImageUrl: user.profileImageUrl,
+          status: user.status,
+        },
+        ...tokens,
+      };
+    } catch (error) {
+      throw new UnauthorizedException('Invalid refresh token : ', error);
+    }
+  }
+
+  async logout(refreshToken: string) {
+    await this.jwtTokenService.revokeRefreshToken(refreshToken);
   }
 }
