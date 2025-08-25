@@ -76,19 +76,11 @@ export class AuthService {
           },
         });
       }
-      const tokens: {
-        accessToken: string;
-        refreshToken: string;
-        expiresIn: number;
-      } = await this.jwtTokenService.generateTokenPair({
-        id: finalUser.id,
-        email: finalUser.email,
-        name: finalUser?.name || '',
-      });
-      return { user: finalUser, tokens: tokens };
+
+      return finalUser;
     });
 
-    return this.formatUserResponse(result?.user, result.tokens);
+    return this.formatUserResponse(result, {});
   }
 
   async login(loginDto: LoginDto): Promise<AuthResponseDto> {
@@ -129,9 +121,9 @@ export class AuthService {
   private formatUserResponse(
     user: any,
     tokens: {
-      accessToken: string;
-      refreshToken: string;
-      expiresIn: number;
+      accessToken?: string;
+      refreshToken?: string;
+      expiresIn?: number;
     },
   ): AuthResponseDto {
     return {

@@ -8,7 +8,7 @@ export class AuthResponseDto {
     createdAt: Date;
     updatedAt: Date;
   };
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
+  accessToken?: string;
+  refreshToken?: string;
+  expiresIn?: number;
 }
