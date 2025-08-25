@@ -12,7 +12,7 @@ model User {
   id                    String     @id @default(cuid())
   email                 String     @unique
   name                  String?
-  password              String?
+  password              String?    //일반유저 패스워드
   profileImageUrl       String?    // 공개 URL
   profileImagePath      String?    // 스토리지 경로 (삭제용)
   status                UserStatus @default(OFFLINE)
@@ -20,6 +20,10 @@ model User {
   lastActiveWorkspaceId String?
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
+    // OAuth 계정들
+  accounts         Account[]
+
+  refreshTokens    RefreshToken[]
 }
 
 enum UserStatus {
@@ -27,4 +31,35 @@ enum UserStatus {
   AWAY
   OFFLINE
   DO_NOT_DISTURB
+}
+
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refreshToken      String? @db.Text
+  accessToken       String? @db.Text
+  expiresAt         Int?
+  tokenType         String?
+  scope             String?
+  idToken           String? @db.Text
+  sessionState      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
 }
