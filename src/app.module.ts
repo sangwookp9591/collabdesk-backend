@@ -7,6 +7,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { SupabaseModule } from './supabase/supabase.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtTokenModule } from './jwt-token/jwt-token.module';
+import { WorkspaceModule } from './workspace/workspace.module';
+import { UserModule } from './user/user.module';
 
 @Module({
   imports: [
@@ -17,6 +19,8 @@ import { JwtTokenModule } from './jwt-token/jwt-token.module';
     SupabaseModule,
     AuthModule,
     JwtTokenModule,
+    WorkspaceModule,
+    UserModule,
   ],
   controllers: [AppController],
   providers: [AppService],
