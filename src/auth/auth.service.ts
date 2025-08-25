@@ -10,6 +10,7 @@ import { LoginDto } from './dto/login.dto';
 import { SignupDto } from './dto/signup.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { SupabaseService } from 'src/supabase/supabase.service';
+import { generateImagePath } from 'src/common/utils/image-path';
 
 @Injectable()
 export class AuthService {
@@ -50,9 +51,15 @@ export class AuthService {
 
       // 2. 프로필 이미지 처리 (이미지 업로드 실패 시 트랜잭션 롤백)
       if (profileImage) {
-        const uploadResult = await this.supabaseService.uploadProfileImage(
+        const filePath = generateImagePath({
+          file: profileImage,
+          type: 'profile',
+          key: newUser.id,
+        });
+
+        const uploadResult = await this.supabaseService.uploadImage(
           profileImage,
-          newUser.id,
+          filePath,
         );
 
         if (!uploadResult.url || !uploadResult.path) {
