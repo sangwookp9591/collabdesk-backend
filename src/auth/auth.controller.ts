@@ -10,7 +10,10 @@ import {
   HttpStatus,
   HttpCode,
   UnauthorizedException,
+  Res,
+  Req,
 } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
@@ -64,8 +67,23 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  async login(@Body(ValidationPipe) loginDto: LoginDto) {
+  async login(
+    @Body(ValidationPipe) loginDto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const user = await this.authService.login(loginDto);
+    // 쿠키에 Refresh Token 심기
+    if (user.refreshToken) {
+      res.cookie('refreshToken', user.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        path: '/',
+        maxAge: user.expiresIn! * 1000, // expiresIn 초 단위
+      });
+    }
+
+    delete user.refreshToken;
 
     return {
       success: true,
@@ -75,17 +93,50 @@ export class AuthController {
   }
 
   @Post('refresh')
-  async refreshTokens(@Body('refreshToken') refreshToken: string) {
+  async refreshTokens(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const refreshToken = req.cookies['refreshToken'];
+
+    console.log('refreshToken : ', refreshToken);
     if (!refreshToken) {
       throw new UnauthorizedException('Refresh token required');
     }
-    return this.authService.refreshTokens(refreshToken);
+    const response = await this.authService.refreshTokens(
+      refreshToken as string,
+    );
+
+    if (!response?.refreshToken) {
+      return {
+        success: false,
+        message: 'refresh token 갱신 실팬',
+        data: null,
+      };
+    }
+
+    res.cookie('refreshToken', response.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/',
+      maxAge: response.expiresIn * 1000, // expiresIn 초 단위
+    });
+
+    return {
+      success: true,
+      message: '토큰갱신에 성공했습니다.',
+      data: { accessToken: response.accessToken },
+    };
   }
 
   @Post('logout')
-  async logout(@Body('refreshToken') refreshToken: string) {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const refreshToken = req.cookies['refreshToken'];
+    console.log('refreshToken : ', refreshToken);
     if (refreshToken) {
-      await this.authService.logout(refreshToken);
+      await this.authService.logout(refreshToken as string);
+      res.clearCookie('refreshToken', { path: '/' });
     }
     return { message: 'Logged out successfully' };
   }
