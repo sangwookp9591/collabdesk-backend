@@ -13,6 +13,32 @@ export class SupabaseService {
     );
   }
 
+  async uploadImage(
+    file: Express.Multer.File,
+    filePath: string,
+  ): Promise<{ url: string; path: string }> {
+    const { data, error } = await this.supabase.storage
+      .from('collabdesk-bucket')
+      .upload(filePath, file.buffer, {
+        contentType: file.mimetype,
+        upsert: true,
+      });
+
+    console.log('data : ', data);
+    if (error) {
+      throw new Error(`image upload failed: ${error.message}`);
+    }
+
+    const { data: urlData } = this.supabase.storage
+      .from('collabdesk-bucket')
+      .getPublicUrl(filePath);
+
+    return {
+      url: urlData.publicUrl,
+      path: filePath,
+    };
+  }
+
   async uploadProfileImage(
     file: Express.Multer.File,
     userId: string,
