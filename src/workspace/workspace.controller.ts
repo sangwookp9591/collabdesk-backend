@@ -42,13 +42,26 @@ export class WorkspaceController {
       },
     }),
   )
-  create(
+  async create(
     @Req() req: Request,
     @Body() dto: CreateWorkspaceDto,
     @UploadedFile() image?: Express.Multer.File,
   ) {
-    if (req?.user) {
-      return this.workspaceService.create(dto, req.user?.sub, image);
+    const userId = req.user?.sub;
+
+    if (!userId) {
+      return {
+        success: false,
+        message: '세션 정보 없음.',
+        data: { workspace: null },
+      };
+    } else {
+      const workspace = await this.workspaceService.create(dto, userId, image);
+      return {
+        success: true,
+        message: '워크스페이스 생성 성공.',
+        data: { workspace: workspace },
+      };
     }
   }
 }

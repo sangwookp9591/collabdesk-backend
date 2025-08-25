@@ -17,33 +17,45 @@ export class WorkspaceService {
     userId: string,
     image: Express.Multer.File | undefined,
   ) {
-    const slug = await this.generateUniqueWorkspaceSlug(this.prisma);
+    return this.prisma.$transaction(async (tx) => {
+      const slug = await this.generateUniqueWorkspaceSlug(this.prisma);
 
-    const workspace = await this.prisma.workspace.create({
-      data: {
-        name: dto.name,
-        slug,
-        ownerId: userId,
-      },
-    });
-    let finalWorkspace = workspace;
-
-    if (image) {
-      const filePath = generateImagePath({
-        file: image,
-        type: 'workspace',
-        key: workspace?.id,
-      });
-      const uploadResult = await this.supabase.uploadImage(image, filePath);
-
-      finalWorkspace = await this.prisma.workspace.update({
-        where: {
-          id: workspace?.id,
+      console.log('slug : ', slug, dto);
+      const workspace = await tx.workspace.create({
+        data: {
+          name: dto.name,
+          slug,
+          ownerId: userId,
         },
-        data: { imageUrl: uploadResult?.url },
       });
+
+      let finalWorkspace = workspace;
+
+      await tx.workspaceMember.create({
+        data: {
+          userId,
+          workspaceId: workspace.id,
+          role: 'OWNER',
+        },
+      });
+
+      if (image) {
+        const filePath = generateImagePath({
+          file: image,
+          type: 'workspace',
+          key: workspace?.id,
+        });
+        const uploadResult = await this.supabase.uploadImage(image, filePath);
+
+        finalWorkspace = await tx.workspace.update({
+          where: {
+            id: workspace?.id,
+          },
+          data: { imageUrl: uploadResult?.url },
+        });
+      }
       return finalWorkspace;
-    }
+    });
   }
 
   private async generateUniqueWorkspaceSlug(prisma: PrismaService) {
