@@ -2,6 +2,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -20,6 +21,8 @@ async function bootstrap() {
       transform: true, //클라이언트에서 문자열로 보내도 DTO에 정의된 타입으로 변환됨
     }),
   );
+
+  app.useGlobalFilters(new PrismaExceptionFilter());
 
   app.setGlobalPrefix('api');
 
