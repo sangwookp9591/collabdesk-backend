@@ -11,12 +11,14 @@ import { SignupDto } from './dto/signup.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { SupabaseService } from 'src/supabase/supabase.service';
 import { generateImagePath } from 'src/common/utils/image-path';
+import { JwtTokenService } from 'src/jwt-token/jwt-token.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private supabaseService: SupabaseService,
+    private jwtTokenService: JwtTokenService,
   ) {}
 
   async signup(
@@ -74,11 +76,19 @@ export class AuthService {
           },
         });
       }
-
-      return finalUser;
+      const tokens: {
+        accessToken: string;
+        refreshToken: string;
+        expiresIn: number;
+      } = await this.jwtTokenService.generateTokenPair({
+        id: finalUser.id,
+        email: finalUser.email,
+        name: finalUser?.name || '',
+      });
+      return { user: finalUser, tokens: tokens };
     });
 
-    return this.formatUserResponse(result);
+    return this.formatUserResponse(result?.user, result.tokens);
   }
 
   async login(loginDto: LoginDto): Promise<AuthResponseDto> {
@@ -98,23 +108,43 @@ export class AuthService {
       );
     }
 
+    const tokens: {
+      accessToken: string;
+      refreshToken: string;
+      expiresIn: number;
+    } = await this.jwtTokenService.generateTokenPair({
+      id: user.id,
+      email: user.email,
+      name: user?.name || '',
+    });
+
     const updatedUser = await this.prisma.user.update({
       where: { id: user.id },
       data: { status: 'ONLINE', lastActiveAt: new Date() },
     });
 
-    return this.formatUserResponse(updatedUser);
+    return this.formatUserResponse(updatedUser, tokens);
   }
 
-  private formatUserResponse(user: any): AuthResponseDto {
+  private formatUserResponse(
+    user: any,
+    tokens: {
+      accessToken: string;
+      refreshToken: string;
+      expiresIn: number;
+    },
+  ): AuthResponseDto {
     return {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      profileImageUrl: user.profileImageUrl,
-      status: user.status,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        profileImageUrl: user.profileImageUrl,
+        status: user.status,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
+      ...tokens,
     };
   }
 }
