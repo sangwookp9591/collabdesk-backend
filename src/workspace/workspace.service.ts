@@ -36,6 +36,8 @@ export class WorkspaceService {
       });
 
       const channelSlug = await this.generateUniqueChannelSlug(this.prisma);
+
+      //기본 채널 생성
       const defaultChannel = await this.prisma.channel.create({
         data: {
           name: 'general',
@@ -46,7 +48,7 @@ export class WorkspaceService {
         },
       });
 
-      // 3️⃣ 채널 멤버 생성 (생성자 포함)
+      // 채널 멤버 생성
       await this.prisma.channelMember.create({
         data: {
           channelId: defaultChannel.id,
