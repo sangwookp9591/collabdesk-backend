@@ -13,21 +13,45 @@ export class ChannelService {
   constructor(private prisma: PrismaService) {}
 
   async create(createChannelDto: CreateChannelDto, userId: string) {
+    // 1. 채널 생성
     const slug = await this.generateUniqueChannelSlug(this.prisma);
-    return this.prisma.channel.create({
+    const channel = await this.prisma.channel.create({
       data: {
-        name: createChannelDto.name,
-        slug: slug,
+        ...createChannelDto,
         createdById: userId,
-        workspaceId: createChannelDto.workspaceId,
-        members: {
-          create: {
-            userId, // 생성자 자동 추가
-            role: 'ADMIN', // 기본적으로 생성자는 ADMIN 등급
-          },
-        },
+        slug: slug,
       },
     });
+
+    // 2. 채널 만든 유저는 자동 참여
+    await this.prisma.channelMember.create({
+      data: { userId, channelId: channel.id, role: 'ADMIN' },
+    });
+
+    // 3. Public 채널이면 기존 워크스페이스 멤버 전원 참여
+    if (channel.isPublic) {
+      const members = await this.prisma.workspaceMember.findMany({
+        where: { workspaceId: channel.workspaceId, userId: { not: userId } },
+      });
+
+      const joinOps = members.map((member) =>
+        this.prisma.channelMember.upsert({
+          where: {
+            userId_channelId: { userId: member.userId, channelId: channel.id },
+          },
+          update: {},
+          create: {
+            userId: member.userId,
+            channelId: channel.id,
+            role: 'MEMBER',
+          },
+        }),
+      );
+
+      await this.prisma.$transaction(joinOps);
+    }
+
+    return channel;
   }
 
   async findOne(slug: string) {
