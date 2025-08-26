@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(
@@ -28,6 +27,11 @@ export class JwtAuthGuard implements CanActivate {
       const payload = this.jwtService.verify(token, {
         secret: this.configService.get('JWT_ACCESS_SECRET'),
       });
+
+      if (!payload.sub) {
+        throw new UnauthorizedException('Token payload missing user ID');
+      }
+
       (request as any).user = payload; // payload를 Request.user에 저장
       return true;
     } catch (err) {

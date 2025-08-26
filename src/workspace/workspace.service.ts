@@ -26,18 +26,36 @@ export class WorkspaceService {
           name: dto.name,
           slug,
           ownerId: userId,
+          members: {
+            create: {
+              userId,
+              role: 'OWNER',
+            },
+          },
+        },
+      });
+
+      const channelSlug = await this.generateUniqueChannelSlug(this.prisma);
+      const defaultChannel = await this.prisma.channel.create({
+        data: {
+          name: 'general',
+          slug: channelSlug,
+          workspaceId: workspace.id,
+          createdById: userId,
+          isDefault: true,
+        },
+      });
+
+      // 3️⃣ 채널 멤버 생성 (생성자 포함)
+      await this.prisma.channelMember.create({
+        data: {
+          channelId: defaultChannel.id,
+          userId,
+          role: 'ADMIN',
         },
       });
 
       let finalWorkspace = workspace;
-
-      await tx.workspaceMember.create({
-        data: {
-          userId,
-          workspaceId: workspace.id,
-          role: 'OWNER',
-        },
-      });
 
       if (image) {
         const filePath = generateImagePath({
@@ -62,6 +80,14 @@ export class WorkspaceService {
     while (true) {
       const slug = nanoid(8); // 8자리 랜덤 ID
       const exists = await prisma.workspace.findUnique({ where: { slug } });
+      if (!exists) return slug;
+    }
+  }
+
+  private async generateUniqueChannelSlug(prisma: PrismaService) {
+    while (true) {
+      const slug = nanoid(8); // 8자리 랜덤 ID
+      const exists = await prisma.channel.findUnique({ where: { slug } });
       if (!exists) return slug;
     }
   }
