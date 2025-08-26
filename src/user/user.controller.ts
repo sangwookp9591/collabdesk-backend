@@ -63,7 +63,7 @@ export class UserController {
     return {
       success: true,
       message: '마지막 워크스페이스 조회 성공',
-      data: { lastActiveWorkspaceId: lastWorkSpace?.lastActiveWorkspaceId },
+      data: lastWorkSpace,
     };
   }
 }
