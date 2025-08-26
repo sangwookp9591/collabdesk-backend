@@ -128,4 +128,30 @@ export class WorkspaceService {
 
     return { workspaces, currentWorkspace };
   }
+
+  async joinWorkspace(userId: string, workspaceId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      // 워크스페이스 멤버 추가
+      await tx.workspaceMember.create({
+        data: { userId, workspaceId, role: 'MEMBER' },
+      });
+
+      // Public 채널 자동 참여
+      const publicChannels = await tx.channel.findMany({
+        where: { workspaceId, isPublic: true },
+      });
+
+      await Promise.all(
+        publicChannels.map((channel) =>
+          tx.channelMember.upsert({
+            where: { userId_channelId: { userId, channelId: channel.id } },
+            update: {},
+            create: { userId, channelId: channel.id, role: 'MEMBER' },
+          }),
+        ),
+      );
+
+      return { workspaceId, joinedPublicChannels: publicChannels.length };
+    });
+  }
 }
