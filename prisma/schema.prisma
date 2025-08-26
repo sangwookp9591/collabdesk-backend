@@ -5,7 +5,7 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  // directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -26,6 +26,11 @@ model User {
   //workspace
   workspaceMembers      WorkspaceMember[]
   ownedWorkspaces       Workspace[] @relation("WorkspaceOwner")
+  channelMembers        ChannelMember[]
+  channelsCreated       Channel[] @relation("UserChannelsCreated")
+  messages              Message[]
+
+  @@map("users")
 }
 
 enum UserStatus {
@@ -79,6 +84,7 @@ model Workspace {
 
   // Relations
   members               WorkspaceMember[]
+  channels              Channel[]
   owner                 User @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@map("workspaces")
@@ -104,4 +110,97 @@ enum WorkspaceRole {
   ADMIN
   MEMBER
   GUEST
+}
+
+
+model Channel {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  workspaceId String
+  createdById String
+  isPublic    Boolean  @default(true)
+  isDefault   Boolean  @default(false)
+  isArchived  Boolean  @default(false)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy   User @relation("UserChannelsCreated",fields: [createdById], references: [id])
+  members     ChannelMember[]
+  messages    Message[]
+  tabs        ChannelTab[]
+
+  @@unique([workspaceId, name])
+  @@map("channels")
+}
+
+
+model ChannelMember {
+  id        String   @id @default(cuid())
+  userId    String
+  channelId String
+  role      ChannelRole @default(MEMBER)
+  joinedAt  DateTime @default(now())
+  lastReadAt DateTime @default(now())
+  
+  // Relations
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channelId])
+  @@map("channel_members")
+}
+
+enum ChannelRole {
+  ADMIN
+  MEMBER
+}
+
+
+model ChannelTab {
+  id        String   @id @default(cuid())
+  name      String
+  type      TabType
+  channelId String
+  order     Int      @default(0)
+  data      Json?    // 탭별 추가 데이터 (보드 설정, 문서 내용 등)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@map("channel_tabs")
+}
+
+enum TabType {
+  CHAT
+  BOARD
+  DOCUMENT
+  CANVAS
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  content   String
+  channelId String
+  userId    String
+  parentId  String?  // 스레드용 (답글인 경우 원본 메시지 ID)
+  editedAt  DateTime?
+  isPinned  Boolean  @default(false)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    Message? @relation("MessageThread", fields: [parentId], references: [id])
+  replies   Message[] @relation("MessageThread")
+
+  @@map("messages")
 }
