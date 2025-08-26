@@ -57,6 +57,18 @@ export class JwtTokenService {
     }
   }
 
+  getRefreshPayload(token: string): TokenPayload {
+    try {
+      // JWT 검증
+      const payload = this.jwtService.verify(token, {
+        secret: this.configService.get('JWT_REFRESH_SECRET'),
+      });
+      return payload;
+    } catch (error) {
+      throw new Error('Invalid refresh token : ', error);
+    }
+  }
+
   async verifyRefreshToken(token: string): Promise<TokenPayload> {
     try {
       // JWT 검증
