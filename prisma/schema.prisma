@@ -115,6 +115,7 @@ enum WorkspaceRole {
 
 model Channel {
   id          String   @id @default(cuid())
+  slug        String   @unique
   name        String
   description String?
   workspaceId String
