@@ -2,6 +2,8 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
+  Param,
   Post,
   Req,
   UploadedFile,
@@ -61,6 +63,29 @@ export class WorkspaceController {
         success: true,
         message: '워크스페이스 생성 성공.',
         data: { workspace: workspace },
+      };
+    }
+  }
+
+  @Get(':slug')
+  async workspaceBySlug(@Req() req: Request, @Param('slug') slug: string) {
+    console.log('slug :', slug);
+    const userId = req.user?.sub;
+
+    if (!userId) {
+      return {
+        success: false,
+        message: '세션 정보 없음.',
+        data: { workspaces: null, currentWorkspace: null },
+      };
+    } else {
+      const { workspaces, currentWorkspace } =
+        await this.workspaceService.workspaceBySlug(slug, userId);
+
+      return {
+        success: true,
+        message: '워크스페이스 생성 성공.',
+        data: { workspaces, currentWorkspace },
       };
     }
   }

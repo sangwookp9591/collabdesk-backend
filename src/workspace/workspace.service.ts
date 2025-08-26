@@ -65,4 +65,39 @@ export class WorkspaceService {
       if (!exists) return slug;
     }
   }
+
+  async workspaceBySlug(slug: string, userId: string) {
+    const workspaces = await this.prisma.workspaceMember.findMany({
+      where: {
+        userId: userId,
+      },
+      select: {
+        workspace: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            imageUrl: true,
+            members: {
+              select: {
+                id: true,
+                userId: true,
+                workspaceId: true,
+                role: true,
+                joinedAt: true,
+                user: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    const currentWorkspace = await this.prisma.workspace.findUnique({
+      where: {
+        slug: slug,
+      },
+    });
+
+    return { workspaces, currentWorkspace };
+  }
 }
