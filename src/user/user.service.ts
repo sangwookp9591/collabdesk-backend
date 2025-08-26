@@ -20,6 +20,7 @@ export class UserService {
       select: {
         workspace: {
           select: {
+            id: true,
             name: true,
             slug: true,
             members: {
@@ -65,5 +66,29 @@ export class UserService {
       lastActiveWorkspaceId: user?.lastActiveWorkspaceId,
       workspaceSlug: workspace?.slug,
     };
+  }
+
+  async updateLastWorkspaceId(userId: string, workspaceId: string) {
+    const updateUser = await this.prisma.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        lastActiveWorkspaceId: workspaceId,
+      },
+      select: {
+        lastActiveWorkspaceId: true,
+      },
+    });
+
+    if (updateUser.lastActiveWorkspaceId === workspaceId) {
+      return {
+        success: true,
+      };
+    } else {
+      return {
+        success: false,
+      };
+    }
   }
 }

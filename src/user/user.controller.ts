@@ -1,4 +1,12 @@
-import { Controller, Get, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Patch,
+  Req,
+  UseGuards,
+  Body,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { UserService } from './user.service';
 import { JwtAuthGuard } from 'src/jwt-token/guards/jwt-auth.guard';
 import type { Request, Response } from 'express';
@@ -65,5 +73,22 @@ export class UserController {
       message: '마지막 워크스페이스 조회 성공',
       data: lastWorkSpace,
     };
+  }
+
+  @Patch('lastworkspace')
+  async updateLastWorkspaceId(
+    @Req() req: Request,
+    @Body()
+    body: {
+      workspaceId: string;
+    },
+  ) {
+    const userId = req.user?.sub;
+    const workspaceId = body.workspaceId;
+    if (userId) {
+      return await this.userService.updateLastWorkspaceId(userId, workspaceId);
+    } else {
+      throw new UnauthorizedException('User 정보가 없습니다.');
+    }
   }
 }
