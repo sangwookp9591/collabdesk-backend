@@ -23,9 +23,15 @@ export class UserService {
             id: true,
             name: true,
             slug: true,
+            imageUrl: true,
             members: {
               select: {
                 id: true,
+                userId: true,
+                workspaceId: true,
+                role: true,
+                joinedAt: true,
+                user: true,
               },
             },
           },
