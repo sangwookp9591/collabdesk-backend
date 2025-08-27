@@ -13,7 +13,7 @@ export class UserService {
     }
   }
 
-  async userWorkspace(id: string) {
+  async userWorkspaces(id: string) {
     const workspaces = await this.prisma.workspaceMember.findMany({
       where: {
         userId: id,
@@ -28,14 +28,8 @@ export class UserService {
             members: {
               select: {
                 id: true,
-                userId: true,
-                workspaceId: true,
-                role: true,
-                joinedAt: true,
-                user: true,
               },
             },
-            channels: true,
           },
         },
       },

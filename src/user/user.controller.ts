@@ -36,8 +36,8 @@ export class UserController {
     };
   }
 
-  @Get('workspace')
-  async userWorkspace(@Req() req: Request) {
+  @Get('workspaces')
+  async userWorkspaces(@Req() req: Request) {
     const userId = req.user?.sub;
 
     if (!userId) {
@@ -48,7 +48,7 @@ export class UserController {
       };
     }
 
-    const workspaces = await this.userService.userWorkspace(userId);
+    const workspaces = await this.userService.userWorkspaces(userId);
     return {
       success: true,
       message: '워크스페이스 목록 조회 성공',
