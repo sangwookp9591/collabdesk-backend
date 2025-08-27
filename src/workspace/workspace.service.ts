@@ -135,6 +135,9 @@ export class WorkspaceService {
       where: {
         slug: slug,
       },
+      include: {
+        channels: true,
+      },
     });
 
     return { workspaces, currentWorkspace };

@@ -35,6 +35,7 @@ export class UserService {
                 user: true,
               },
             },
+            channels: true,
           },
         },
       },
