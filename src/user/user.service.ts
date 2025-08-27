@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { UserStatus } from 'generated/prisma';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
@@ -96,5 +97,16 @@ export class UserService {
         success: false,
       };
     }
+  }
+
+  async updateStatus(userId: string, status: UserStatus) {
+    return this.prisma.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        status: status,
+      },
+    });
   }
 }
