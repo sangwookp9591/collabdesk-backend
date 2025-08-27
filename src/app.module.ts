@@ -10,7 +10,7 @@ import { JwtTokenModule } from './jwt-token/jwt-token.module';
 import { WorkspaceModule } from './workspace/workspace.module';
 import { UserModule } from './user/user.module';
 import { ChannelModule } from './channel/channel.module';
-import { ChatModule } from './chat/chat.module';
+import { MessageModule } from './message/message.module';
 
 @Module({
   imports: [
@@ -24,7 +24,7 @@ import { ChatModule } from './chat/chat.module';
     WorkspaceModule,
     UserModule,
     ChannelModule,
-    ChatModule,
+    MessageModule,
   ],
   controllers: [AppController],
   providers: [AppService],
