@@ -4,6 +4,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { SupabaseService } from '../supabase/supabase.service';
 import { generateImagePath } from 'src/common/utils/image-path';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class WorkspaceService {
@@ -18,7 +19,7 @@ export class WorkspaceService {
     image: Express.Multer.File | undefined,
   ) {
     return this.prisma.$transaction(async (tx) => {
-      const slug = await this.generateUniqueWorkspaceSlug(this.prisma);
+      const slug = await this.generateUniqueWorkspaceSlug(tx);
 
       console.log('slug : ', slug, dto);
       const workspace = await tx.workspace.create({
@@ -37,8 +38,9 @@ export class WorkspaceService {
 
       const channelSlug = await this.generateUniqueChannelSlug(this.prisma);
 
+      console.log('channelSlug : ', channelSlug);
       //기본 채널 생성
-      const defaultChannel = await this.prisma.channel.create({
+      const defaultChannel = await tx.channel.create({
         data: {
           name: 'general',
           slug: channelSlug,
@@ -48,16 +50,22 @@ export class WorkspaceService {
         },
       });
 
+      console.log('defaultChannel : ', defaultChannel);
+
       // 채널 멤버 생성
-      await this.prisma.channelMember.create({
+      const channel = await tx.channelMember.create({
         data: {
           channelId: defaultChannel.id,
-          userId,
+          userId: userId,
           role: 'ADMIN',
         },
       });
 
+      console.log('channel : ', channel);
+
       let finalWorkspace = workspace;
+
+      console.log('finalWorkspace : ', finalWorkspace);
 
       if (image) {
         const filePath = generateImagePath({
@@ -72,24 +80,27 @@ export class WorkspaceService {
             id: workspace?.id,
           },
           data: { imageUrl: uploadResult?.url },
+          include: {
+            channels: true,
+          },
         });
       }
       return finalWorkspace;
     });
   }
 
-  private async generateUniqueWorkspaceSlug(prisma: PrismaService) {
+  private async generateUniqueWorkspaceSlug(tx: Prisma.TransactionClient) {
     while (true) {
       const slug = nanoid(8); // 8자리 랜덤 ID
-      const exists = await prisma.workspace.findUnique({ where: { slug } });
+      const exists = await tx.workspace.findUnique({ where: { slug } });
       if (!exists) return slug;
     }
   }
 
-  private async generateUniqueChannelSlug(prisma: PrismaService) {
+  private async generateUniqueChannelSlug(tx: Prisma.TransactionClient) {
     while (true) {
       const slug = nanoid(8); // 8자리 랜덤 ID
-      const exists = await prisma.channel.findUnique({ where: { slug } });
+      const exists = await tx.channel.findUnique({ where: { slug } });
       if (!exists) return slug;
     }
   }
