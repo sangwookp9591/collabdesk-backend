@@ -6,6 +6,20 @@ import { GetMessagesQueryDto } from './dto/get-message-by-channel';
 export class MessageService {
   constructor(private prisma: PrismaService) {}
 
+  async create(
+    userId: string,
+    dto: { channelId: string; content: string; parentId?: string },
+  ) {
+    return await this.prisma.message.create({
+      data: {
+        userId,
+        channelId: dto.channelId,
+        content: dto.content,
+        parentId: dto.parentId,
+      },
+    });
+  }
+
   /**
    * 채널 메시지 조회 (무한스크롤용)
    * @param slug 채널 slug
