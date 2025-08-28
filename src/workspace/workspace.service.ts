@@ -168,4 +168,19 @@ export class WorkspaceService {
       return { workspaceId, joinedPublicChannels: publicChannels.length };
     });
   }
+
+  async isWorkspaceMember(
+    userId: string,
+    workspaceId: string,
+  ): Promise<boolean> {
+    const member = await this.prisma.workspaceMember.findUnique({
+      where: {
+        userId_workspaceId: {
+          userId,
+          workspaceId,
+        },
+      },
+    });
+    return !!member;
+  }
 }
