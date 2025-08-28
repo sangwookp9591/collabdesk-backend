@@ -41,4 +41,10 @@ export class MessageService {
     });
     return messages;
   }
+
+  async remove(id: string) {
+    return this.prisma.message.delete({
+      where: { id },
+    });
+  }
 }
