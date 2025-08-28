@@ -1,13 +1,24 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { GetMessagesQueryDto } from './dto/get-message-by-channel';
 
 @Injectable()
 export class MessageService {
   constructor(private prisma: PrismaService) {}
 
-  async getMessagesByChannel(channelId: string) {
+  /**
+   * 채널 메시지 조회 (무한스크롤용)
+   * @param slug 채널 slug
+   * @param cursor 마지막으로 가져온 메시지 id (마지막 메시지 기준)
+   * @param take 한 번에 가져올 메시지 수
+   */
+  async getMessagesByChannel(slug: string, dto: GetMessagesQueryDto) {
+    const take = dto?.take ?? 10;
+    const page = dto?.page ?? 1;
+
+    const skip = (page - 1) * take;
     const channel = await this.prisma.channel.findUnique({
-      where: { id: channelId },
+      where: { slug: slug },
     });
 
     if (!channel) {
@@ -22,9 +33,15 @@ export class MessageService {
       profileImageUrl: true,
     };
 
+    const total = await this.prisma.message.count({
+      where: {
+        channelId: channel.id,
+        parentId: null, //상위 메시지만
+      },
+    });
     const messages = await this.prisma.message.findMany({
       where: {
-        channelId: channelId,
+        channelId: channel.id,
         parentId: null, //상위 메시지만
       },
       include: {
@@ -38,8 +55,12 @@ export class MessageService {
         },
       },
       orderBy: { createdAt: 'asc' }, // 최신순 혹은 오름차순
+      take,
+      skip,
     });
-    return messages;
+
+    const hasMore = skip + messages.length < total;
+    return { messages, hasMore, total };
   }
 
   async remove(id: string) {
