@@ -1,49 +1,43 @@
 import {
-  Injectable,
   CanActivate,
   ExecutionContext,
-  UnauthorizedException,
+  Injectable,
+  Logger,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { WsException } from '@nestjs/websockets';
 import { Socket } from 'socket.io';
 
 @Injectable()
 export class WsJwtAuthGuard implements CanActivate {
+  private readonly logger = new Logger(WsJwtAuthGuard.name);
+
   constructor(
     private jwtService: JwtService,
     private configService: ConfigService,
   ) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const client: Socket = context.switchToWs().getClient();
-    const authHeader =
-      client.handshake.headers['authorization'] || client.handshake.auth?.token; // socket.io client에서 보낸 auth 옵션도 가능
-
-    if (!authHeader) {
-      throw new UnauthorizedException('No token provided');
-    }
-
-    const [type, token] = authHeader.split(' ');
-    if (type !== 'Bearer' || !token) {
-      throw new UnauthorizedException('Invalid token format');
-    }
-
     try {
+      const client: Socket = context.switchToWs().getClient();
+      const token = client.handshake.auth?.token;
+      console.log('token : ', token);
+
+      if (!token) {
+        throw new WsException('No token provided');
+      }
+
       const payload = this.jwtService.verify(token, {
         secret: this.configService.get('JWT_ACCESS_SECRET'),
       });
+      client.data.user = payload;
 
-      if (!payload.sub) {
-        throw new UnauthorizedException('Token payload missing user ID');
-      }
-
-      // client 객체에 user 정보 저장
-      (client as any).user = payload;
-
+      this.logger.log(`User ${payload.sub} authenticated via WebSocket`);
       return true;
-    } catch (err) {
-      throw new UnauthorizedException('Invalid or expired token : ', err);
+    } catch (error) {
+      this.logger.error('WebSocket authentication failed:', error.message);
+      throw new WsException('Authentication failed');
     }
   }
 }
