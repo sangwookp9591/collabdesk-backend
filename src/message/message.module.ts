@@ -8,9 +8,11 @@ import { UserService } from 'src/user/user.service';
 import { MessageController } from './message.controller';
 import { JwtAuthGuard } from 'src/jwt-token/guards/jwt-auth.guard';
 import { JwtService } from '@nestjs/jwt';
+import { WorkspaceService } from 'src/workspace/workspace.service';
+import { SupabaseModule } from 'src/supabase/supabase.module';
 
 @Module({
-  imports: [PrismaModule, UserModule, JwtTokenModule],
+  imports: [PrismaModule, UserModule, JwtTokenModule, SupabaseModule],
   controllers: [MessageController],
   providers: [
     MessageGateway,
@@ -18,6 +20,7 @@ import { JwtService } from '@nestjs/jwt';
     UserService,
     JwtAuthGuard,
     JwtService,
+    WorkspaceService,
   ],
 })
 export class MessageModule {}

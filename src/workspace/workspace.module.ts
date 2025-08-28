@@ -11,5 +11,6 @@ import { JwtService } from '@nestjs/jwt';
   imports: [PrismaModule, SupabaseModule, JwtTokenModule],
   controllers: [WorkspaceController],
   providers: [WorkspaceService, JwtAuthGuard, JwtService],
+  exports: [WorkspaceService],
 })
 export class WorkspaceModule {}
