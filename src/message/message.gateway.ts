@@ -60,8 +60,13 @@ export class MessageGateway
 
   handleConnection(client: AuthenticatedSocket) {
     try {
-      const userId = client.data.user.sub;
-      const email = client.data.user.email;
+      const auth = this.messageService.authenticateClient(client);
+      if (!auth) {
+        this.logger.log(`Socket Connect Error : NotFound User`);
+        client.disconnect();
+        return;
+      }
+      const { userId, email } = auth;
       this.userConnections.set(userId, {
         userId,
         socketId: client?.id,
@@ -85,8 +90,10 @@ export class MessageGateway
 
   handleDisconnect(client: AuthenticatedSocket) {
     try {
-      const userId = client.data?.user?.sub;
-      if (userId) {
+      const auth = this.messageService.authenticateClient(client);
+
+      if (auth?.userId) {
+        const userId = auth?.userId;
         const useConnection = this.userConnections.get(userId);
         if (!useConnection) return;
 
