@@ -21,12 +21,23 @@ export class MessageService {
     userId: string,
     dto: { channelId: string; content: string; parentId?: string },
   ) {
+    const userFields = {
+      id: true,
+      email: true,
+      name: true,
+      status: true,
+      profileImageUrl: true,
+    };
     return await this.prisma.message.create({
       data: {
         userId,
         channelId: dto.channelId,
         content: dto.content,
         parentId: dto.parentId,
+      },
+      include: {
+        user: { select: userFields },
+        replies: true,
       },
     });
   }
