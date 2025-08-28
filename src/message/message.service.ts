@@ -3,6 +3,9 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { GetMessagesQueryDto } from './dto/get-message-by-channel';
 import { WorkspaceService } from 'src/workspace/workspace.service';
 import { ChannelService } from 'src/channel/channel.service';
+import { Socket } from 'socket.io';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class MessageService {
@@ -10,6 +13,8 @@ export class MessageService {
     private prisma: PrismaService,
     private workspaceService: WorkspaceService,
     private channelService: ChannelService,
+    private jwtService: JwtService,
+    private configService: ConfigService,
   ) {}
 
   async create(
@@ -102,5 +107,20 @@ export class MessageService {
 
   async getUserChannels(workspaceId: string, userId: string) {
     return await this.workspaceService.getUserChannels(workspaceId, userId);
+  }
+
+  authenticateClient(client: Socket): { userId: string; email: string } | null {
+    const token = client.handshake.auth?.token;
+    if (!token) return null;
+
+    try {
+      const payload = this.jwtService.verify(token, {
+        secret: this.configService.get('JWT_ACCESS_SECRET'),
+      });
+      return { userId: payload.sub, email: payload.email };
+    } catch (err) {
+      console.log('err : ', err);
+      return null;
+    }
   }
 }
