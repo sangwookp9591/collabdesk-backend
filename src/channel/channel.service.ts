@@ -123,6 +123,18 @@ export class ChannelService {
     return { success: true, message: '삭제 성공', data: null };
   }
 
+  async isChannelMember(channelId: string, userId: string): Promise<boolean> {
+    const member = await this.prisma.channelMember.findUnique({
+      where: {
+        userId_channelId: {
+          userId,
+          channelId,
+        },
+      },
+    });
+    return !!member;
+  }
+
   private async generateUniqueChannelSlug(prisma: PrismaService) {
     while (true) {
       const slug = nanoid(8); // 8자리 랜덤 ID

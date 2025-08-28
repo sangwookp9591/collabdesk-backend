@@ -84,7 +84,7 @@ export class WorkspaceController {
 
       return {
         success: true,
-        message: '워크스페이스 생성 성공.',
+        message: '워크스페이스 목록 조회 성공.',
         data: { workspaces, currentWorkspace },
       };
     }

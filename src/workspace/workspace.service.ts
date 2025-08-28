@@ -170,8 +170,8 @@ export class WorkspaceService {
   }
 
   async isWorkspaceMember(
-    userId: string,
     workspaceId: string,
+    userId: string,
   ): Promise<boolean> {
     const member = await this.prisma.workspaceMember.findUnique({
       where: {
@@ -181,6 +181,27 @@ export class WorkspaceService {
         },
       },
     });
+
+    console.log('member :', member);
     return !!member;
+  }
+
+  async getUserChannels(workspaceId: string, userId: string) {
+    return await this.prisma.channel.findMany({
+      where: {
+        workspaceId,
+        members: {
+          some: {
+            userId: userId,
+          },
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        isPublic: true,
+      },
+    });
   }
 }
