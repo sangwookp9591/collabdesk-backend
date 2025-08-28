@@ -123,7 +123,7 @@ export class ChannelService {
     return { success: true, message: '삭제 성공', data: null };
   }
 
-  async isChannelMember(channelId: string, userId: string): Promise<boolean> {
+  async isMember(channelId: string, userId: string): Promise<boolean> {
     const member = await this.prisma.channelMember.findUnique({
       where: {
         userId_channelId: {

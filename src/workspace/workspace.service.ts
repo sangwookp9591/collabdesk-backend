@@ -169,10 +169,7 @@ export class WorkspaceService {
     });
   }
 
-  async isWorkspaceMember(
-    workspaceId: string,
-    userId: string,
-  ): Promise<boolean> {
+  async isMember(workspaceId: string, userId: string): Promise<boolean> {
     const member = await this.prisma.workspaceMember.findUnique({
       where: {
         userId_workspaceId: {

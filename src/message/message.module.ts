@@ -10,6 +10,8 @@ import { JwtAuthGuard } from 'src/jwt-token/guards/jwt-auth.guard';
 import { JwtService } from '@nestjs/jwt';
 import { WorkspaceService } from 'src/workspace/workspace.service';
 import { SupabaseModule } from 'src/supabase/supabase.module';
+import { WsJwtAuthGuard } from 'src/jwt-token/guards/ws-jwt-auth.guard';
+import { ChannelService } from 'src/channel/channel.service';
 
 @Module({
   imports: [PrismaModule, UserModule, JwtTokenModule, SupabaseModule],
@@ -18,9 +20,11 @@ import { SupabaseModule } from 'src/supabase/supabase.module';
     MessageGateway,
     MessageService,
     UserService,
+    WsJwtAuthGuard,
     JwtAuthGuard,
     JwtService,
     WorkspaceService,
+    ChannelService,
   ],
 })
 export class MessageModule {}

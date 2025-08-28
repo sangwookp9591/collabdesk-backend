@@ -1,10 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { GetMessagesQueryDto } from './dto/get-message-by-channel';
+import { WorkspaceService } from 'src/workspace/workspace.service';
+import { ChannelService } from 'src/channel/channel.service';
 
 @Injectable()
 export class MessageService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private workspaceService: WorkspaceService,
+    private channelService: ChannelService,
+  ) {}
 
   async create(
     userId: string,
@@ -81,5 +87,20 @@ export class MessageService {
     return this.prisma.message.delete({
       where: { id },
     });
+  }
+
+  async isWorkspaceMember(
+    workspaceId: string,
+    userId: string,
+  ): Promise<boolean> {
+    return await this.workspaceService.isMember(workspaceId, userId);
+  }
+
+  async isChannelMember(channelId: string, userId: string): Promise<boolean> {
+    return await this.channelService.isMember(channelId, userId);
+  }
+
+  async getUserChannels(workspaceId: string, userId: string) {
+    return await this.workspaceService.getUserChannels(workspaceId, userId);
   }
 }
