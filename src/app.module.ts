@@ -11,6 +11,7 @@ import { WorkspaceModule } from './workspace/workspace.module';
 import { UserModule } from './user/user.module';
 import { ChannelModule } from './channel/channel.module';
 import { MessageModule } from './message/message.module';
+import { SocketStateModule } from './socket-state/socket-state.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { MessageModule } from './message/message.module';
     UserModule,
     ChannelModule,
     MessageModule,
+    SocketStateModule,
   ],
   controllers: [AppController],
   providers: [AppService],
