@@ -12,7 +12,7 @@ import { WorkspaceService } from 'src/workspace/workspace.service';
 import { SupabaseModule } from 'src/supabase/supabase.module';
 import { WsJwtAuthGuard } from 'src/jwt-token/guards/ws-jwt-auth.guard';
 import { ChannelService } from 'src/channel/channel.service';
-import { SocketStateService } from 'src/socket-state/socket-state.service';
+import { MessageRedisService } from './message-redis.service';
 @Module({
   imports: [PrismaModule, UserModule, JwtTokenModule, SupabaseModule],
   controllers: [MessageController],
@@ -25,7 +25,7 @@ import { SocketStateService } from 'src/socket-state/socket-state.service';
     JwtService,
     WorkspaceService,
     ChannelService,
-    SocketStateService,
+    MessageRedisService,
   ],
 })
 export class MessageModule {}
