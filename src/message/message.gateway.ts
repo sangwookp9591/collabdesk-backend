@@ -55,6 +55,7 @@ export class MessageGateway
   private subscribeToChannel(channelId: string) {
     const redisChannel = `channel:${channelId}`;
     this.messageRedisService.subscribeChannel(redisChannel, (message) => {
+      this.logger.debug('new Message', message.content);
       this.server.to(redisChannel).emit('newMessage', message);
     });
   }

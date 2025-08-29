@@ -179,7 +179,6 @@ export class WorkspaceService {
       },
     });
 
-    console.log('member :', member);
     return !!member;
   }
 
