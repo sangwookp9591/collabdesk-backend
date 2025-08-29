@@ -166,11 +166,11 @@ model WorkspaceInvite {
   workspaceId String
   invitedById String
   role        WorkspaceRole @default(MEMBER)
-  token       String        @unique @default(cuid())
   status      InviteStatus  @default(PENDING)
   expiresAt   DateTime
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
+  code        String        @unique
   invitedBy   User          @relation("WorkspaceInvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
   workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
@@ -185,11 +185,11 @@ model ChannelInvite {
   invitedById   String
   role          ChannelRole  @default(MEMBER)
   isGuestInvite Boolean      @default(false)
-  token         String       @unique @default(cuid())
   status        InviteStatus @default(PENDING)
   expiresAt     DateTime
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+  code          String       @unique
   channel       Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
   invitedBy     User         @relation("ChannelInvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
 
