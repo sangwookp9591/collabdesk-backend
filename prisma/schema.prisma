@@ -9,26 +9,29 @@ datasource db {
 }
 
 model User {
-  id                    String     @id @default(cuid())
-  email                 String     @unique
-  name                  String?
-  password              String?    //일반유저 패스워드
-  profileImageUrl       String?    // 공개 URL
-  profileImagePath      String?    // 스토리지 경로 (삭제용)
-  status                UserStatus @default(OFFLINE)
-  lastActiveAt          DateTime   @default(now())
-  lastActiveWorkspaceId String?
-  createdAt             DateTime   @default(now())
-  updatedAt             DateTime   @updatedAt
+  id                      String     @id @default(cuid())
+  email                   String     @unique
+  name                    String?
+  password                String?    //일반유저 패스워드
+  profileImageUrl         String?    // 공개 URL
+  profileImagePath        String?    // 스토리지 경로 (삭제용)
+  status                  UserStatus @default(OFFLINE)
+  lastActiveAt            DateTime   @default(now())
+  lastActiveWorkspaceId   String?
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime   @updatedAt
   // OAuth 계정들
-  accounts              Account[]
-  refreshTokens         RefreshToken[]
+  accounts                Account[]
+  refreshTokens           RefreshToken[]
   //workspace
-  workspaceMembers      WorkspaceMember[]
-  ownedWorkspaces       Workspace[] @relation("WorkspaceOwner")
-  channelMembers        ChannelMember[]
-  channelsCreated       Channel[] @relation("UserChannelsCreated")
-  messages              Message[]
+  workspaceMembers        WorkspaceMember[]
+  channelMembers          ChannelMember[]
+  messages                Message[]
+  // self join
+  ownedWorkspaces         Workspace[] @relation("WorkspaceOwner")
+  channelsCreated         Channel[] @relation("UserChannelsCreated")
+  sentWorkspaceInvites    WorkspaceInvite[] @relation("WorkspaceInvitedBy")
+  sentChannelInvites      ChannelInvite[] @relation("ChannelInvitedBy")
 
   @@map("users")
 }
@@ -85,6 +88,7 @@ model Workspace {
   // Relations
   members               WorkspaceMember[]
   channels              Channel[]
+  invites               WorkspaceInvite[]
   owner                 User @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@map("workspaces")
@@ -133,6 +137,7 @@ model Channel {
   members     ChannelMember[]
   messages    Message[]
   tabs        ChannelTab[]
+  invites     ChannelInvite[]
 
   @@unique([workspaceId, name])
   @@map("channels")
@@ -204,4 +209,61 @@ model Message {
   replies   Message[] @relation("MessageThread")
 
   @@map("messages")
+}
+
+
+//
+model WorkspaceInvite {
+  id          String   @id @default(cuid())
+  email       String
+  workspaceId String
+  invitedById String
+  role        WorkspaceRole @default(MEMBER)
+  token       String   @unique @default(cuid()) // 초대 토큰
+  status      InviteStatus @default(PENDING)
+  expiresAt   DateTime // 만료일 (일반적으로 7일)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  // 워크스페이스 관계
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  // 유저와 관계
+  invitedBy   User @relation("WorkspaceInvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@unique([email, workspaceId]) // 같은 워크스페이스에 같은 이메일로 중복 초대 방지
+  @@map("workspace_invites")
+}
+
+// 채널 초대
+model ChannelInvite {
+  id          String   @id @default(cuid())
+  email       String
+  channelId   String
+  invitedById String
+  role        ChannelRole @default(MEMBER)
+  isGuestInvite Boolean @default(false) // 게스트 초대 여부 (워크스페이스 멤버가 아닌 경우)
+  token       String   @unique @default(cuid()) // 초대 토큰
+  status      InviteStatus @default(PENDING)
+  expiresAt   DateTime // 만료일 (일반적으로 7일)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  //채널 관계
+  channel     Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  //유저와 관계
+  invitedBy   User @relation("ChannelInvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@unique([email, channelId]) // 같은 채널에 같은 이메일로 중복 초대 방지
+  @@map("channel_invites")
+}
+
+enum InviteStatus {
+  PENDING    // 대기중
+  ACCEPTED   // 수락됨
+  DECLINED   // 거절됨
+  EXPIRED    // 만료됨
 }
