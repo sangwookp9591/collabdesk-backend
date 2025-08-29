@@ -3,46 +3,34 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  // directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
-  id                      String     @id @default(cuid())
-  email                   String     @unique
-  name                    String?
-  password                String?    //일반유저 패스워드
-  profileImageUrl         String?    // 공개 URL
-  profileImagePath        String?    // 스토리지 경로 (삭제용)
-  status                  UserStatus @default(OFFLINE)
-  lastActiveAt            DateTime   @default(now())
-  lastActiveWorkspaceId   String?
-  createdAt               DateTime   @default(now())
-  updatedAt               DateTime   @updatedAt
-  // OAuth 계정들
-  accounts                Account[]
-  refreshTokens           RefreshToken[]
-  //workspace
-  workspaceMembers        WorkspaceMember[]
-  channelMembers          ChannelMember[]
-  messages                Message[]
-  // self join
-  ownedWorkspaces         Workspace[] @relation("WorkspaceOwner")
-  channelsCreated         Channel[] @relation("UserChannelsCreated")
-  sentWorkspaceInvites    WorkspaceInvite[] @relation("WorkspaceInvitedBy")
-  sentChannelInvites      ChannelInvite[] @relation("ChannelInvitedBy")
+  id                    String            @id @default(cuid())
+  email                 String            @unique
+  name                  String?
+  password              String?
+  profileImageUrl       String?
+  profileImagePath      String?
+  status                UserStatus        @default(OFFLINE)
+  lastActiveAt          DateTime          @default(now())
+  lastActiveWorkspaceId String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  accounts              Account[]
+  sentChannelInvites    ChannelInvite[]   @relation("ChannelInvitedBy")
+  channelMembers        ChannelMember[]
+  channelsCreated       Channel[]         @relation("UserChannelsCreated")
+  messages              Message[]
+  refreshTokens         RefreshToken[]
+  sentWorkspaceInvites  WorkspaceInvite[] @relation("WorkspaceInvitedBy")
+  workspaceMembers      WorkspaceMember[]
+  ownedWorkspaces       Workspace[]       @relation("WorkspaceOwner")
 
   @@map("users")
 }
-
-enum UserStatus {
-  ONLINE
-  AWAY
-  OFFLINE
-  DO_NOT_DISTURB
-}
-
 
 model Account {
   id                String  @id @default(cuid())
@@ -50,15 +38,14 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refreshToken      String? @db.Text
-  accessToken       String? @db.Text
+  refreshToken      String?
+  accessToken       String?
   expiresAt         Int?
   tokenType         String?
   scope             String?
-  idToken           String? @db.Text
+  idToken           String?
   sessionState      String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
   @@map("accounts")
@@ -75,38 +62,146 @@ model RefreshToken {
 }
 
 model Workspace {
-  id                    String   @id @default(cuid())
-  name                  String
-  slug                  String   @unique
-  description           String?
-  imageUrl              String?
-  ownerId               String
-  
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-
-  // Relations
-  members               WorkspaceMember[]
-  channels              Channel[]
-  invites               WorkspaceInvite[]
-  owner                 User @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  id          String            @id @default(cuid())
+  name        String
+  slug        String            @unique
+  description String?
+  imageUrl    String?
+  ownerId     String
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  channels    Channel[]
+  invites     WorkspaceInvite[]
+  members     WorkspaceMember[]
+  owner       User              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@map("workspaces")
 }
 
 model WorkspaceMember {
-  id          String   @id @default(cuid())
+  id          String        @id @default(cuid())
   userId      String
   workspaceId String
   role        WorkspaceRole @default(MEMBER)
-  joinedAt    DateTime @default(now())
-  
-  // Relations
-  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  joinedAt    DateTime      @default(now())
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([userId, workspaceId])
   @@map("workspace_members")
+}
+
+model Channel {
+  id          String          @id @default(cuid())
+  slug        String          @unique
+  name        String
+  description String?
+  workspaceId String
+  createdById String
+  isPublic    Boolean         @default(true)
+  isDefault   Boolean         @default(false)
+  isArchived  Boolean         @default(false)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  invites     ChannelInvite[]
+  members     ChannelMember[]
+  tabs        ChannelTab[]
+  createdBy   User            @relation("UserChannelsCreated", fields: [createdById], references: [id])
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  messages    Message[]
+
+  @@unique([workspaceId, name])
+  @@map("channels")
+}
+
+model ChannelMember {
+  id         String      @id @default(cuid())
+  userId     String
+  channelId  String
+  role       ChannelRole @default(MEMBER)
+  joinedAt   DateTime    @default(now())
+  lastReadAt DateTime    @default(now())
+  channel    Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channelId])
+  @@map("channel_members")
+}
+
+model ChannelTab {
+  id        String   @id @default(cuid())
+  name      String
+  type      TabType
+  channelId String
+  order     Int      @default(0)
+  data      Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@map("channel_tabs")
+}
+
+model Message {
+  id        String    @id @default(cuid())
+  content   String
+  channelId String
+  userId    String
+  parentId  String?
+  editedAt  DateTime?
+  isPinned  Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  channel   Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  parent    Message?  @relation("MessageThread", fields: [parentId], references: [id])
+  replies   Message[] @relation("MessageThread")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model WorkspaceInvite {
+  id          String        @id @default(cuid())
+  email       String
+  workspaceId String
+  invitedById String
+  role        WorkspaceRole @default(MEMBER)
+  token       String        @unique @default(cuid())
+  status      InviteStatus  @default(PENDING)
+  expiresAt   DateTime
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  invitedBy   User          @relation("WorkspaceInvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([email, workspaceId])
+  @@map("workspace_invites")
+}
+
+model ChannelInvite {
+  id            String       @id @default(cuid())
+  email         String
+  channelId     String
+  invitedById   String
+  role          ChannelRole  @default(MEMBER)
+  isGuestInvite Boolean      @default(false)
+  token         String       @unique @default(cuid())
+  status        InviteStatus @default(PENDING)
+  expiresAt     DateTime
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  channel       Channel      @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  invitedBy     User         @relation("ChannelInvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@unique([email, channelId])
+  @@map("channel_invites")
+}
+
+enum UserStatus {
+  ONLINE
+  AWAY
+  OFFLINE
+  DO_NOT_DISTURB
 }
 
 enum WorkspaceRole {
@@ -116,71 +211,9 @@ enum WorkspaceRole {
   GUEST
 }
 
-
-model Channel {
-  id          String   @id @default(cuid())
-  slug        String   @unique
-  name        String
-  description String?
-  workspaceId String
-  createdById String
-  isPublic    Boolean  @default(true)
-  isDefault   Boolean  @default(false)
-  isArchived  Boolean  @default(false)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  createdBy   User @relation("UserChannelsCreated",fields: [createdById], references: [id])
-  members     ChannelMember[]
-  messages    Message[]
-  tabs        ChannelTab[]
-  invites     ChannelInvite[]
-
-  @@unique([workspaceId, name])
-  @@map("channels")
-}
-
-
-model ChannelMember {
-  id        String   @id @default(cuid())
-  userId    String
-  channelId String
-  role      ChannelRole @default(MEMBER)
-  joinedAt  DateTime @default(now())
-  lastReadAt DateTime @default(now())
-  
-  // Relations
-  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, channelId])
-  @@map("channel_members")
-}
-
 enum ChannelRole {
   ADMIN
   MEMBER
-}
-
-
-model ChannelTab {
-  id        String   @id @default(cuid())
-  name      String
-  type      TabType
-  channelId String
-  order     Int      @default(0)
-  data      Json?    // 탭별 추가 데이터 (보드 설정, 문서 내용 등)
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
-
-  @@map("channel_tabs")
 }
 
 enum TabType {
@@ -190,80 +223,9 @@ enum TabType {
   CANVAS
 }
 
-model Message {
-  id        String   @id @default(cuid())
-  content   String
-  channelId String
-  userId    String
-  parentId  String?  // 스레드용 (답글인 경우 원본 메시지 ID)
-  editedAt  DateTime?
-  isPinned  Boolean  @default(false)
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parent    Message? @relation("MessageThread", fields: [parentId], references: [id])
-  replies   Message[] @relation("MessageThread")
-
-  @@map("messages")
-}
-
-
-//
-model WorkspaceInvite {
-  id          String   @id @default(cuid())
-  email       String
-  workspaceId String
-  invitedById String
-  role        WorkspaceRole @default(MEMBER)
-  token       String   @unique @default(cuid()) // 초대 토큰
-  status      InviteStatus @default(PENDING)
-  expiresAt   DateTime // 만료일 (일반적으로 7일)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  // 워크스페이스 관계
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  // 유저와 관계
-  invitedBy   User @relation("WorkspaceInvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
-
-  @@unique([email, workspaceId]) // 같은 워크스페이스에 같은 이메일로 중복 초대 방지
-  @@map("workspace_invites")
-}
-
-// 채널 초대
-model ChannelInvite {
-  id          String   @id @default(cuid())
-  email       String
-  channelId   String
-  invitedById String
-  role        ChannelRole @default(MEMBER)
-  isGuestInvite Boolean @default(false) // 게스트 초대 여부 (워크스페이스 멤버가 아닌 경우)
-  token       String   @unique @default(cuid()) // 초대 토큰
-  status      InviteStatus @default(PENDING)
-  expiresAt   DateTime // 만료일 (일반적으로 7일)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  //채널 관계
-  channel     Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  //유저와 관계
-  invitedBy   User @relation("ChannelInvitedBy", fields: [invitedById], references: [id], onDelete: Cascade)
-
-  @@unique([email, channelId]) // 같은 채널에 같은 이메일로 중복 초대 방지
-  @@map("channel_invites")
-}
-
 enum InviteStatus {
-  PENDING    // 대기중
-  ACCEPTED   // 수락됨
-  DECLINED   // 거절됨
-  EXPIRED    // 만료됨
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
 }
