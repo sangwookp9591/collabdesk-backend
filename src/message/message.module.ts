@@ -12,9 +12,16 @@ import { WorkspaceService } from 'src/workspace/workspace.service';
 import { SupabaseModule } from 'src/supabase/supabase.module';
 import { WsJwtAuthGuard } from 'src/jwt-token/guards/ws-jwt-auth.guard';
 import { ChannelService } from 'src/channel/channel.service';
-import { MessageRedisService } from './message-redis.service';
+import { RedisModule } from 'src/redis/redis.module';
+import { MessageRedisService } from 'src/redis/message-redis.service';
 @Module({
-  imports: [PrismaModule, UserModule, JwtTokenModule, SupabaseModule],
+  imports: [
+    PrismaModule,
+    UserModule,
+    JwtTokenModule,
+    SupabaseModule,
+    RedisModule,
+  ],
   controllers: [MessageController],
   providers: [
     MessageGateway,

@@ -11,7 +11,7 @@ import { MessageService } from './message.service';
 import { Server, Socket } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
 import { WsJwtAuthGuard } from 'src/jwt-token/guards/ws-jwt-auth.guard';
-import { MessageRedisService } from './message-redis.service';
+import { MessageRedisService } from 'src/redis/message-redis.service';
 
 interface AuthenticatedSocket extends Socket {
   data: {

@@ -12,6 +12,7 @@ import { UserModule } from './user/user.module';
 import { ChannelModule } from './channel/channel.module';
 import { MessageModule } from './message/message.module';
 import { SocketStateModule } from './socket-state/socket-state.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { SocketStateModule } from './socket-state/socket-state.module';
     ChannelModule,
     MessageModule,
     SocketStateModule,
+    RedisModule,
   ],
   controllers: [AppController],
   providers: [AppService],
