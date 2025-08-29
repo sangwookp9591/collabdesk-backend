@@ -22,6 +22,9 @@ export class MessageRedisService implements OnModuleDestroy {
   private static readonly RECENT_MESSAGES = (id: string) =>
     `recent_messages:${id}`;
 
+  // 이미 구독한 채널을 저장
+  private subscribedChannels: Set<string> = new Set();
+
   constructor() {
     this.pub = new Redis({
       host: process.env.REDIS_HOST || 'localhost',
@@ -168,17 +171,30 @@ export class MessageRedisService implements OnModuleDestroy {
   // -----------------------
   // Pub/Sub 기능
   // -----------------------
-  async publish(channel: string, message: any) {
-    await this.pub.publish(channel, JSON.stringify(message));
+  async publish(channelKey: string, message: any) {
+    await this.pub.publish(channelKey, JSON.stringify(message));
   }
 
-  subscribeChannel(channel: string, gatewayCallback: (msg: any) => void) {
+  subscribeChannel(channelKey: string, gatewayCallback: (msg: any) => void) {
+    if (this.subscribedChannels.has(channelKey)) {
+      this.logger.log(
+        `이미 해당 서버에는 구독된 Redis Key입니다. ${channelKey}`,
+      );
+      return;
+    }
+
+    this.subscribedChannels.add(channelKey);
+
     this.sub
-      .subscribe(channel)
-      .catch((err) => this.logger.error(`Redis 구독 error : ${err}`));
+      .subscribe(channelKey)
+      .catch((err) =>
+        this.logger.error(
+          `Redis 구독 [KEY] : ${channelKey} , [ERROR] : ${err}`,
+        ),
+      );
 
     this.sub.on('message', (chan, message) => {
-      if (chan === channel) {
+      if (chan === channelKey) {
         // 같은 채널 key이면 메세지전달
         gatewayCallback(JSON.parse(message));
       }
