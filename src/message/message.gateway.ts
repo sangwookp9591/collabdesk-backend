@@ -47,7 +47,7 @@ export class MessageGateway
 
   constructor(
     private readonly messageService: MessageService,
-    private readonly socketState: SocketStateService,
+    private readonly socketStateService: SocketStateService,
   ) {}
 
   handleConnection(client: AuthenticatedSocket) {
@@ -65,7 +65,7 @@ export class MessageGateway
       lastActiveAt: new Date(),
     };
 
-    this.socketState.setUserConnection(auth.userId, userConnection);
+    this.socketStateService.setUserConnection(auth.userId, userConnection);
     client.emit('connected', {
       message: 'socket 연결 성공',
       userId: auth.userId,
@@ -77,7 +77,7 @@ export class MessageGateway
     const auth = this.messageService.authenticateClient(client);
     if (!auth) return;
 
-    this.socketState.removeUserConnection(auth.userId);
+    this.socketStateService.removeUserConnection(auth.userId);
   }
 
   @SubscribeMessage('joinWorkspace')
@@ -96,7 +96,7 @@ export class MessageGateway
       return;
     }
 
-    this.socketState.joinWorkspace(userId, payload.workspaceId);
+    this.socketStateService.joinWorkspace(userId, payload.workspaceId);
     client.join(`workspace:${payload.workspaceId}`);
 
     const channels = await this.messageService.getUserChannels(
@@ -104,7 +104,7 @@ export class MessageGateway
       userId,
     );
     channels.forEach((channel) => {
-      this.socketState.joinChannel(userId, channel.id);
+      this.socketStateService.joinChannel(userId, channel.id);
       client.join(`channel:${channel.id}`);
     });
 
