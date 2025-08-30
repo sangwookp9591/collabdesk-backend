@@ -1,6 +1,15 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { WorkspaceRole } from '@prisma/client';
 import Redis from 'ioredis';
 
+interface inviteDto {
+  type: 'workspace' | 'channel';
+  inviteId: string;
+  email: string;
+  workspaceId: string;
+  channelId?: string;
+  role: WorkspaceRole;
+}
 @Injectable()
 export class InviteRedisService implements OnModuleDestroy {
   private readonly logger = new Logger(InviteRedisService.name);
@@ -33,11 +42,11 @@ export class InviteRedisService implements OnModuleDestroy {
     await this.redis.quit();
   }
 
-  async setInviteCode(code: string, data: any, ttl: number = 604800) {
+  async setInviteCode(code: string, ttl: number = 604800, data: inviteDto) {
     await this.redis.setex(`invite:${code}`, ttl, JSON.stringify(data));
   }
 
-  async getInviteCode(token: string) {
+  async getInviteCode(token: string): Promise<inviteDto | null> {
     const data = await this.redis.get(`invite:${token}`);
     return data ? JSON.parse(data) : null;
   }
