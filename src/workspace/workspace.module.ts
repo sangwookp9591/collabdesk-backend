@@ -8,6 +8,7 @@ import { JwtAuthGuard } from 'src/jwt-token/guards/jwt-auth.guard';
 import { JwtService } from '@nestjs/jwt';
 import { WorkspaceInviteService } from './workspace-invite.service';
 import { InviteRedisService } from 'src/redis/invite-redis.service';
+import { MailService } from 'src/mail/mail.service';
 
 @Module({
   imports: [PrismaModule, SupabaseModule, JwtTokenModule],
@@ -18,6 +19,7 @@ import { InviteRedisService } from 'src/redis/invite-redis.service';
     JwtService,
     WorkspaceInviteService,
     InviteRedisService,
+    MailService,
   ],
   exports: [WorkspaceService],
 })
