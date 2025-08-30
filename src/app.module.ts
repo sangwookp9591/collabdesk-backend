@@ -13,6 +13,7 @@ import { ChannelModule } from './channel/channel.module';
 import { MessageModule } from './message/message.module';
 import { SocketStateModule } from './socket-state/socket-state.module';
 import { RedisModule } from './redis/redis.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { RedisModule } from './redis/redis.module';
     MessageModule,
     SocketStateModule,
     RedisModule,
+    MailModule,
   ],
   controllers: [AppController],
   providers: [AppService],
