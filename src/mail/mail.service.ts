@@ -57,7 +57,7 @@ export class MailService {
   async sendWorkspaceInvite(data: WorkspaceInviteEmailData): Promise<void> {
     const { to, inviterName, workspaceName, code, expiresAt } = data;
 
-    const inviteUrl = `${this.configService.get('FRONTEND_URL')}/invite/workspace/${code}`;
+    const inviteUrl = `${this.configService.get('FRONTEND_URL')}/onboarding/invite?type=workspace&code=${code}`;
     const expiresAtFormatted = expiresAt.toLocaleDateString('ko-KR', {
       year: 'numeric',
       month: 'long',
@@ -113,7 +113,7 @@ export class MailService {
       isGuestInvite,
     } = data;
 
-    const inviteUrl = `${this.configService.get('FRONTEND_URL')}/invite/channel/${code}`;
+    const inviteUrl = `${this.configService.get('FRONTEND_URL')}/onboarding/invite?type=channel&code=${code}`;
     const expiresAtFormatted = expiresAt.toLocaleDateString('ko-KR', {
       year: 'numeric',
       month: 'long',
