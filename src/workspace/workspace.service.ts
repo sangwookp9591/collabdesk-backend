@@ -217,6 +217,16 @@ export class WorkspaceService {
       where: {
         workspaceId: workspace?.id,
       },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            profileImageUrl: true,
+          },
+        },
+      },
     });
   }
 

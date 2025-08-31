@@ -153,6 +153,16 @@ export class ChannelService {
       where: {
         channelId: channel?.id,
       },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            profileImageUrl: true,
+          },
+        },
+      },
     });
   }
 
