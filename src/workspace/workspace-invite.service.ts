@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -25,6 +26,7 @@ export interface AcceptInviteDto {
 
 @Injectable()
 export class WorkspaceInviteService {
+  private readonly logger = new Logger(WorkspaceInviteService.name);
   constructor(
     private prisma: PrismaService,
     private mailService: MailService,
@@ -71,9 +73,6 @@ export class WorkspaceInviteService {
         invitedById: userId,
         email: email,
         workspaceId: workspaceId,
-        expiresAt: {
-          gt: new Date(),
-        },
       },
     });
 
@@ -144,7 +143,6 @@ export class WorkspaceInviteService {
         workspaceId: workspaceInvite.workspaceId,
         role: workspaceRole,
       });
-
       await this.mailService.sendWorkspaceInvite({
         to: email,
         inviterName: inviterUser?.name || '',
@@ -158,10 +156,12 @@ export class WorkspaceInviteService {
   async getInviteWorkspace(email: string, code: string) {
     const invite = await this.validateCode(code);
 
+    console.log('invite2 : ', invite);
     if (invite.email !== email) {
       throw new UnauthorizedException('올바른 이메일이 아닙니다.');
     }
 
+    this.logger.log('getInviteWorkspace invite!!!! : ', invite.email);
     return await this.prisma.workspace.findUnique({
       where: {
         id: invite.workspaceId,
@@ -212,9 +212,15 @@ export class WorkspaceInviteService {
   private async validateCode(code: string) {
     const invite = await this.inviteRedisService.getInviteCode(code);
 
-    if (!invite || invite.type !== 'workspace') {
-      throw new BadRequestException();
+    if (!invite) {
+      // Redis에서 키를 찾을 수 없으면 만료된 것
+      throw new BadRequestException('초대 코드가 만료되었습니다.');
     }
+
+    if (invite.type !== 'workspace') {
+      throw new BadRequestException('잘못된 초대 코드입니다.');
+    }
+
     return invite;
   }
 
