@@ -11,6 +11,7 @@ import { InviteStatus, WorkspaceRole } from '@prisma/client';
 import { MailService } from 'src/mail/mail.service';
 import { InviteRedisService } from 'src/redis/invite-redis.service';
 import { generateShortCode } from 'src/common/utils/nanoid';
+import { InviteWorkspaceDto } from './dto/invite-workspace.dto';
 
 export interface CreateWorkspaceInviteDto {
   email: string;
@@ -31,12 +32,8 @@ export class WorkspaceInviteService {
   ) {}
 
   // 워크스페이스 초대 생성
-  async inviteWorkspace(
-    email: string,
-    userId: string,
-    workspaceId: string,
-    workspaceRole: WorkspaceRole,
-  ) {
+  async inviteWorkspace(userId: string, dto: InviteWorkspaceDto) {
+    const { email, workspaceId, workspaceRole } = dto;
     const inviterUser = await this.prisma.user.findUnique({
       where: {
         id: userId,

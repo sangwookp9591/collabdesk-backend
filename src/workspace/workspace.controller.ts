@@ -6,6 +6,7 @@ import {
   Param,
   Post,
   Req,
+  UnauthorizedException,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -15,6 +16,7 @@ import { JwtAuthGuard } from 'src/jwt-token/guards/jwt-auth.guard';
 import type { Request } from 'express';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { InviteWorkspaceDto } from './dto/invite-workspace.dto';
 
 @UseGuards(JwtAuthGuard)
 @Controller('workspace')
@@ -88,5 +90,15 @@ export class WorkspaceController {
         data: { workspaces, currentWorkspace },
       };
     }
+  }
+
+  @Post('invite')
+  async inviteWorkspace(@Req() req: Request, @Body() dto: InviteWorkspaceDto) {
+    const userId = req.user?.sub;
+    if (!userId) {
+      throw new UnauthorizedException('이용자 정보가 없습니다.');
+    }
+
+    return await this.workspaceService.inviteWorkspace(userId, dto);
   }
 }
