@@ -204,6 +204,22 @@ export class WorkspaceService {
     });
   }
 
+  async getMembersBySlug(slug: string) {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: {
+        slug,
+      },
+      select: {
+        id: true,
+      },
+    });
+    return await this.prisma.workspaceMember.findMany({
+      where: {
+        workspaceId: workspace?.id,
+      },
+    });
+  }
+
   async inviteWorkspace(userId: string, dto: InviteWorkspaceDto) {
     return await this.workspaceInviteService.inviteWorkspace(userId, dto);
   }
