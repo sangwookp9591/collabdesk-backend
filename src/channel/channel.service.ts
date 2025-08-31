@@ -7,10 +7,15 @@ import { CreateChannelDto } from './dto/create-channel.dto';
 import { UpdateChannelDto } from './dto/update-channel.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { nanoid } from 'nanoid';
+import { ChannelInviteService } from './channel-invite.service';
+import { InviteChannelDto } from './dto/invite-channel.dto';
 
 @Injectable()
 export class ChannelService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private channelInviteService: ChannelInviteService,
+  ) {}
 
   async create(createChannelDto: CreateChannelDto, userId: string) {
     // 1. 채널 생성
@@ -151,6 +156,21 @@ export class ChannelService {
     });
   }
 
+  async inviteChannel(userId: string, dto: InviteChannelDto) {
+    return await this.channelInviteService.inviteChannel(userId, dto);
+  }
+
+  async getInviteChannel(email: string, code: string) {
+    return await this.channelInviteService.getInviteChannel(email, code);
+  }
+
+  async joinChannelByCode(userId: string, email: string, code: string) {
+    return await this.channelInviteService.joinChannelByCode(
+      userId,
+      email,
+      code,
+    );
+  }
   private async generateUniqueChannelSlug(prisma: PrismaService) {
     while (true) {
       const slug = nanoid(8); // 8자리 랜덤 ID
