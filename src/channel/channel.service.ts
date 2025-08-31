@@ -135,6 +135,22 @@ export class ChannelService {
     return !!member;
   }
 
+  async getMembersBySlug(slug: string) {
+    const channel = await this.prisma.channel.findUnique({
+      where: {
+        slug,
+      },
+      select: {
+        id: true,
+      },
+    });
+    return await this.prisma.channelMember.findMany({
+      where: {
+        channelId: channel?.id,
+      },
+    });
+  }
+
   private async generateUniqueChannelSlug(prisma: PrismaService) {
     while (true) {
       const slug = nanoid(8); // 8자리 랜덤 ID

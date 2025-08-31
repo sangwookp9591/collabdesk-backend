@@ -21,29 +21,38 @@ export class ChannelController {
   constructor(private readonly channelService: ChannelService) {}
 
   @Post()
-  create(@Req() req: Request, @Body() createChannelDto: CreateChannelDto) {
+  async reate(@Req() req: Request, @Body() createChannelDto: CreateChannelDto) {
     const userId = req.user!.sub;
-    return this.channelService.create(createChannelDto, userId);
+    return await this.channelService.create(createChannelDto, userId);
   }
 
   @Get(':slug')
-  findOne(@Req() req: Request, @Param('slug') slug: string) {
-    return this.channelService.findOne(slug);
+  async findOne(@Req() req: Request, @Param('slug') slug: string) {
+    return await this.channelService.findOne(slug);
   }
 
   @Patch(':slug')
-  updateBySlug(
+  async updateBySlug(
     @Req() req: Request,
     @Param('slug') slug: string,
     @Body() updateChannelDto: UpdateChannelDto,
   ) {
     const userId = req.user!.sub;
-    return this.channelService.updateBySlug(slug, userId, updateChannelDto);
+    return await this.channelService.updateBySlug(
+      slug,
+      userId,
+      updateChannelDto,
+    );
   }
 
   @Delete(':slug')
-  removeBySlug(@Req() req: Request, @Param('slug') slug: string) {
+  async removeBySlug(@Req() req: Request, @Param('slug') slug: string) {
     const userId = req.user!.sub;
-    return this.channelService.removeBySlug(slug, userId);
+    return await this.channelService.removeBySlug(slug, userId);
+  }
+
+  @Get(':slug/members')
+  async getMembersBySlug(@Param('slug') slug: string) {
+    return await this.channelService.getMembersBySlug(slug);
   }
 }
