@@ -12,5 +12,6 @@ export class InviteWorkspaceDto {
   workspaceId: string;
 
   @ApiProperty({ example: 'MEMBER', description: 'Workspace Role MEMBER' })
-  workspaceRole: WorkspaceRole = 'MEMBER';
+  @IsNotEmpty({ message: '워크스페이스 역할값은  필수값입니다.' })
+  workspaceRole: WorkspaceRole;
 }
