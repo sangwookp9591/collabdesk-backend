@@ -5,11 +5,13 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req,
   UnauthorizedException,
   UploadedFile,
   UseGuards,
   UseInterceptors,
+  ValidationPipe,
 } from '@nestjs/common';
 import { WorkspaceService } from './workspace.service';
 import { JwtAuthGuard } from 'src/jwt-token/guards/jwt-auth.guard';
@@ -69,6 +71,20 @@ export class WorkspaceController {
     }
   }
 
+  @Get('invite')
+  async getInviteWorkspace(@Req() req: Request, @Query('code') code: string) {
+    const email = req.user?.email;
+    if (!email) {
+      throw new UnauthorizedException('이메일 정보가 없습니다.');
+    }
+
+    if (!(code && code.length === 6)) {
+      throw new BadRequestException('잘못된 요청입니다.');
+    }
+
+    return await this.workspaceService.getInviteWorkspace(email, code);
+  }
+
   @Get(':slug')
   async workspaceBySlug(@Req() req: Request, @Param('slug') slug: string) {
     console.log('slug :', slug);
@@ -93,12 +109,26 @@ export class WorkspaceController {
   }
 
   @Post('invite')
-  async inviteWorkspace(@Req() req: Request, @Body() dto: InviteWorkspaceDto) {
+  async inviteWorkspace(
+    @Req() req: Request,
+    @Body(ValidationPipe) dto: InviteWorkspaceDto,
+  ) {
     const userId = req.user?.sub;
     if (!userId) {
       throw new UnauthorizedException('이용자 정보가 없습니다.');
     }
 
     return await this.workspaceService.inviteWorkspace(userId, dto);
+  }
+
+  @Post('invite/join')
+  async joinWorkspaceByCode(@Req() req: Request, @Body('code') code: string) {
+    const userId = req.user?.sub;
+    const email = req.user?.email;
+    if (!(userId && email)) {
+      throw new UnauthorizedException('이용자 정보가 없습니다.');
+    }
+
+    return await this.workspaceService.joinWorkspaceByCode(userId, email, code);
   }
 }
