@@ -8,7 +8,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { InviteStatus, WorkspaceRole } from '@prisma/client';
+import { ChannelRole, InviteStatus, WorkspaceRole } from '@prisma/client';
 import { MailService } from 'src/mail/mail.service';
 import { InviteRedisService } from 'src/redis/invite-redis.service';
 import { generateShortCode } from 'src/common/utils/nanoid';
@@ -176,21 +176,64 @@ export class WorkspaceInviteService {
       throw new UnauthorizedException('올바른 이메일이 아닙니다.');
     }
 
-    await this.prisma.workspaceInvite.update({
-      where: {
-        code,
-      },
-      data: {
-        status: InviteStatus.ACCEPTED,
-      },
-    });
+    return await this.prisma.$transaction(async (tx) => {
+      await tx.workspaceInvite.update({
+        where: {
+          code,
+        },
+        data: {
+          status: InviteStatus.ACCEPTED,
+        },
+      });
+      const createWorkspaceMember = await tx.workspaceMember.create({
+        data: {
+          userId: userId,
+          workspaceId: invite.workspaceId,
+          role: invite.role,
+        },
+      });
 
-    return await this.prisma.workspaceMember.create({
-      data: {
-        userId: userId,
-        workspaceId: invite.workspaceId,
-        role: invite.role,
-      },
+      const channels = await tx.channel.findMany({
+        where: {
+          workspaceId: createWorkspaceMember.workspaceId,
+        },
+        select: {
+          id: true,
+          isPublic: true,
+        },
+      });
+
+      await Promise.all(
+        channels.map((channel) => {
+          // private 채널인데 일반 멤버라면 skip
+          if (
+            !channel.isPublic &&
+            !(invite.role === 'OWNER' || invite.role === 'ADMIN')
+          ) {
+            return;
+          }
+
+          return tx.channelMember.upsert({
+            where: {
+              userId_channelId: {
+                userId,
+                channelId: channel.id,
+              },
+            },
+            update: {},
+            create: {
+              userId,
+              channelId: channel.id,
+              role:
+                invite.role === 'OWNER' || invite.role === 'ADMIN'
+                  ? ChannelRole.ADMIN
+                  : ChannelRole.MEMBER,
+            },
+          });
+        }),
+      );
+
+      return createWorkspaceMember;
     });
   }
 
