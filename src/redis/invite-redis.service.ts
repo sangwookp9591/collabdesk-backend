@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import { WorkspaceRole } from '@prisma/client';
+import { ChannelRole, WorkspaceRole } from '@prisma/client';
 import Redis from 'ioredis';
 
 interface inviteDto {
@@ -9,6 +9,7 @@ interface inviteDto {
   workspaceId: string;
   channelId?: string;
   role: WorkspaceRole;
+  channelRole?: ChannelRole;
 }
 @Injectable()
 export class InviteRedisService implements OnModuleDestroy {

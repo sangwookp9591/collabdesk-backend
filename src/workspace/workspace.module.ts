@@ -25,6 +25,5 @@ import { MailModule } from 'src/mail/mail.module';
     JwtService,
     WorkspaceInviteService,
   ],
-  exports: [WorkspaceService, WorkspaceInviteService],
 })
 export class WorkspaceModule {}

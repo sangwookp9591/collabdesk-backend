@@ -16,6 +16,9 @@ import { RedisModule } from 'src/redis/redis.module';
 import { MessageRedisService } from 'src/redis/message-redis.service';
 import { WorkspaceInviteService } from 'src/workspace/workspace-invite.service';
 import { MailModule } from 'src/mail/mail.module';
+import { ChannelModule } from 'src/channel/channel.module';
+import { ChannelInviteService } from 'src/channel/channel-invite.service';
+import { WorkspaceModule } from 'src/workspace/workspace.module';
 @Module({
   imports: [
     PrismaModule,
@@ -24,6 +27,8 @@ import { MailModule } from 'src/mail/mail.module';
     SupabaseModule,
     RedisModule,
     MailModule,
+    ChannelModule,
+    WorkspaceModule,
   ],
   controllers: [MessageController],
   providers: [
@@ -37,6 +42,7 @@ import { MailModule } from 'src/mail/mail.module';
     ChannelService,
     MessageRedisService,
     WorkspaceInviteService,
+    ChannelInviteService,
   ],
 })
 export class MessageModule {}
