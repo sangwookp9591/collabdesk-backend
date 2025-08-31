@@ -7,20 +7,24 @@ import { PrismaModule } from 'src/prisma/prisma.module';
 import { JwtAuthGuard } from 'src/jwt-token/guards/jwt-auth.guard';
 import { JwtService } from '@nestjs/jwt';
 import { WorkspaceInviteService } from './workspace-invite.service';
-import { InviteRedisService } from 'src/redis/invite-redis.service';
-import { MailService } from 'src/mail/mail.service';
+import { RedisModule } from 'src/redis/redis.module';
+import { MailModule } from 'src/mail/mail.module';
 
 @Module({
-  imports: [PrismaModule, SupabaseModule, JwtTokenModule],
+  imports: [
+    PrismaModule,
+    SupabaseModule,
+    JwtTokenModule,
+    RedisModule,
+    MailModule,
+  ],
   controllers: [WorkspaceController],
   providers: [
     WorkspaceService,
     JwtAuthGuard,
     JwtService,
     WorkspaceInviteService,
-    InviteRedisService,
-    MailService,
   ],
-  exports: [WorkspaceService],
+  exports: [WorkspaceService, WorkspaceInviteService],
 })
 export class WorkspaceModule {}

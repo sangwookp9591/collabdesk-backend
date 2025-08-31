@@ -14,6 +14,8 @@ import { WsJwtAuthGuard } from 'src/jwt-token/guards/ws-jwt-auth.guard';
 import { ChannelService } from 'src/channel/channel.service';
 import { RedisModule } from 'src/redis/redis.module';
 import { MessageRedisService } from 'src/redis/message-redis.service';
+import { WorkspaceInviteService } from 'src/workspace/workspace-invite.service';
+import { MailModule } from 'src/mail/mail.module';
 @Module({
   imports: [
     PrismaModule,
@@ -21,6 +23,7 @@ import { MessageRedisService } from 'src/redis/message-redis.service';
     JwtTokenModule,
     SupabaseModule,
     RedisModule,
+    MailModule,
   ],
   controllers: [MessageController],
   providers: [
@@ -33,6 +36,7 @@ import { MessageRedisService } from 'src/redis/message-redis.service';
     WorkspaceService,
     ChannelService,
     MessageRedisService,
+    WorkspaceInviteService,
   ],
 })
 export class MessageModule {}
