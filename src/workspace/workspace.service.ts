@@ -207,4 +207,16 @@ export class WorkspaceService {
   async inviteWorkspace(userId: string, dto: InviteWorkspaceDto) {
     return await this.workspaceInviteService.inviteWorkspace(userId, dto);
   }
+
+  async getInviteWorkspace(email: string, code: string) {
+    return await this.workspaceInviteService.getInviteWorkspace(email, code);
+  }
+
+  async joinWorkspaceByCode(userId: string, email: string, code: string) {
+    return await this.workspaceInviteService.joinWorkspaceByCode(
+      userId,
+      email,
+      code,
+    );
+  }
 }
