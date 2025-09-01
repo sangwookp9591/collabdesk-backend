@@ -19,6 +19,7 @@ import { UpdateChannelDto } from './dto/update-channel.dto';
 import { JwtAuthGuard } from 'src/jwt-token/guards/jwt-auth.guard';
 import type { Request } from 'express';
 import { InviteChannelDto } from './dto/invite-channel.dto';
+import { InviteExistingMembersDto } from './dto/invite-existing-members.dto';
 
 @Controller('channel')
 @UseGuards(JwtAuthGuard)
@@ -56,6 +57,20 @@ export class ChannelController {
     }
 
     return await this.channelService.inviteChannel(userId, dto);
+  }
+
+  @Post('invite/members')
+  async inviteExistingMembers(
+    @Req() req: Request,
+    @Body() dto: InviteExistingMembersDto,
+  ) {
+    const userId = req.user?.sub;
+    const email = req.user?.email;
+    if (!(userId && email)) {
+      throw new UnauthorizedException('이용자 정보가 없습니다.');
+    }
+
+    return await this.channelService.inviteExistingMembers(dto);
   }
 
   @Post('invite/join')
