@@ -13,6 +13,7 @@ import { MailService } from 'src/mail/mail.service';
 import { InviteRedisService } from 'src/redis/invite-redis.service';
 import { generateShortCode } from 'src/common/utils/nanoid';
 import { InviteChannelDto } from './dto/invite-channel.dto';
+import { InviteExistingMembersDto } from './dto/invite-existing-members.dto';
 
 @Injectable()
 export class ChannelInviteService {
@@ -191,6 +192,29 @@ export class ChannelInviteService {
     }
   }
 
+  async inviteExistingMembers(dto: InviteExistingMembersDto) {
+    const { members } = dto;
+
+    console.log('members', members);
+    try {
+      await this.prisma.$transaction(
+        members.map((member) =>
+          this.prisma.channelMember.create({
+            data: {
+              userId: member.userId,
+              channelId: member.channelId,
+              role: member.role,
+            },
+          }),
+        ),
+      );
+
+      return { success: true, message: '모든 멤버 초대 완료' };
+    } catch (error) {
+      // 하나라도 실패하면 전체 롤백
+      throw new Error(`초대 실패: ${error.message}`);
+    }
+  }
   async getInviteChannel(email: string, code: string) {
     const invite = await this.validateCode(code);
 
