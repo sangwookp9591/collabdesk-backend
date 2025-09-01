@@ -9,6 +9,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { nanoid } from 'nanoid';
 import { ChannelInviteService } from './channel-invite.service';
 import { InviteChannelDto } from './dto/invite-channel.dto';
+import { InviteExistingMembersDto } from './dto/invite-existing-members.dto';
 
 @Injectable()
 export class ChannelService {
@@ -168,6 +169,10 @@ export class ChannelService {
 
   async inviteChannel(userId: string, dto: InviteChannelDto) {
     return await this.channelInviteService.inviteChannel(userId, dto);
+  }
+
+  async inviteExistingMembers(dto: InviteExistingMembersDto) {
+    return await this.channelInviteService.inviteExistingMembers(dto);
   }
 
   async getInviteChannel(email: string, code: string) {
