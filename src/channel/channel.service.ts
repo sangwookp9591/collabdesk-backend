@@ -10,6 +10,7 @@ import { nanoid } from 'nanoid';
 import { ChannelInviteService } from './channel-invite.service';
 import { InviteChannelDto } from './dto/invite-channel.dto';
 import { InviteExistingMembersDto } from './dto/invite-existing-members.dto';
+import { GetChannelsDto } from './dto/search-channels.dto';
 
 @Injectable()
 export class ChannelService {
@@ -17,6 +18,27 @@ export class ChannelService {
     private prisma: PrismaService,
     private channelInviteService: ChannelInviteService,
   ) {}
+
+  async findMany(dto: GetChannelsDto) {
+    const {
+      workspaceId,
+      search,
+      orderBy = 'createdAt',
+      page = 1,
+      take = 20,
+    } = dto;
+    return await this.prisma.channel.findMany({
+      where: {
+        workspaceId: workspaceId,
+        name: search ? { contains: search } : undefined,
+      },
+      orderBy: {
+        [orderBy]: 'asc',
+      },
+      skip: (page - 1) * take,
+      take: take,
+    });
+  }
 
   async create(createChannelDto: CreateChannelDto, userId: string) {
     // 1. 채널 생성
