@@ -19,7 +19,7 @@ export class ChannelService {
     private channelInviteService: ChannelInviteService,
   ) {}
 
-  async findMany(dto: GetChannelsDto) {
+  async findMany(userId, dto: GetChannelsDto) {
     const {
       workspaceId,
       search,
@@ -31,6 +31,11 @@ export class ChannelService {
       where: {
         workspaceId: workspaceId,
         name: search ? { contains: search } : undefined,
+        members: {
+          some: {
+            userId: userId,
+          },
+        },
       },
       orderBy: {
         [orderBy]: 'asc',

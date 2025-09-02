@@ -29,7 +29,8 @@ export class ChannelController {
 
   @Get()
   async findMany(@Req() req: Request, @Query() dto: GetChannelsDto) {
-    return await this.channelService.findMany(dto);
+    const userId = req.user.id;
+    return await this.channelService.findMany(userId, dto);
   }
 
   @Post()
