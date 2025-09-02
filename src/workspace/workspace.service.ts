@@ -16,6 +16,34 @@ export class WorkspaceService {
     private workspaceInviteService: WorkspaceInviteService,
   ) {}
 
+  async findManyByUserId(userId: string) {
+    return await this.prisma.workspaceMember.findMany({
+      where: {
+        userId: userId,
+      },
+      select: {
+        workspace: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            imageUrl: true,
+            members: {
+              select: {
+                id: true,
+                userId: true,
+                workspaceId: true,
+                role: true,
+                joinedAt: true,
+                user: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
   async create(
     dto: CreateWorkspaceDto,
     userId: string,
@@ -108,33 +136,8 @@ export class WorkspaceService {
     }
   }
 
-  async workspaceBySlug(slug: string, userId: string) {
-    const workspaces = await this.prisma.workspaceMember.findMany({
-      where: {
-        userId: userId,
-      },
-      select: {
-        workspace: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            imageUrl: true,
-            members: {
-              select: {
-                id: true,
-                userId: true,
-                workspaceId: true,
-                role: true,
-                joinedAt: true,
-                user: true,
-              },
-            },
-          },
-        },
-      },
-    });
-    const currentWorkspace = await this.prisma.workspace.findUnique({
+  async workspaceBySlug(slug: string) {
+    return await this.prisma.workspace.findUnique({
       where: {
         slug: slug,
       },
@@ -142,6 +145,11 @@ export class WorkspaceService {
         channels: true,
       },
     });
+  }
+
+  async workspaceInitBySlug(slug: string, userId: string) {
+    const workspaces = await this.findManyByUserId(userId);
+    const currentWorkspace = await this.workspaceBySlug(slug);
 
     return { workspaces, currentWorkspace };
   }
@@ -183,6 +191,19 @@ export class WorkspaceService {
     });
 
     return !!member;
+  }
+
+  async getWorkspaceMember(workspaceId: string, userId: string) {
+    const member = await this.prisma.workspaceMember.findUnique({
+      where: {
+        userId_workspaceId: {
+          userId,
+          workspaceId,
+        },
+      },
+    });
+
+    return member;
   }
 
   async getUserChannels(workspaceId: string, userId: string) {

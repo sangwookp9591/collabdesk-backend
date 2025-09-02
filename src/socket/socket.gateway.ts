@@ -40,11 +40,9 @@ interface UserConnection {
   namespace: '/wsg',
 })
 @UseGuards(WsJwtAuthGuard)
-export class WebsocketGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
-{
+export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
-  private readonly logger = new Logger(WebsocketGateway.name);
+  private readonly logger = new Logger(SocketGateway.name);
 
   constructor(
     private readonly messageService: MessageService,
@@ -58,11 +56,25 @@ export class WebsocketGateway
   private setUpRedisSubscriptions() {
     // 채널 생성 이벤트 구독
     this.messageRedisService.subscribeChannel(
-      'channel:created',
+      'channel:created:public',
       (message: Channel) => {
         this.logger.log('채널 생성 이벤트 ');
         this.server
           .to(`workspace:${message.workspaceId}`)
+          .emit('channelCreated', message);
+      },
+    );
+
+    // 채널 생성 이벤트 구독
+    this.messageRedisService.subscribeChannel(
+      'channel:created:private',
+      (message: Channel) => {
+        this.logger.log('채널 생성 이벤트 ');
+        this.server
+          .to(`workspace:${message.workspaceId}:OWNER`)
+          .emit('channelCreated', message);
+        this.server
+          .to(`workspace:${message.workspaceId}:ADMIN`)
           .emit('channelCreated', message);
       },
     );
@@ -132,12 +144,12 @@ export class WebsocketGateway
     @MessageBody() payload: { workspaceId: string },
   ) {
     const userId = client.data.user.sub;
-    const isMember = await this.messageService.isWorkspaceMember(
+    const member = await this.messageService.getWorkspaceMember(
       payload.workspaceId,
       userId,
     );
 
-    if (!isMember) {
+    if (!member) {
       client.emit('error', { message: 'Access denied to workspace' });
       return;
     }
@@ -159,6 +171,7 @@ export class WebsocketGateway
     }
 
     client.join(`workspace:${payload.workspaceId}`);
+    client.join(`workspace:${payload.workspaceId}:${member.role}`);
     client.to(`workspace:${payload.workspaceId}`).emit('userJoinedWorkspace', {
       userId,
       workspaceId: payload.workspaceId,
@@ -200,6 +213,9 @@ export class WebsocketGateway
 
   // 외부 호출 이벤트
   async publishChannelCreated(channel: Channel) {
-    await this.messageRedisService.publish('channel:created', channel);
+    const ev = channel?.isPublic
+      ? 'channel:created:public'
+      : 'channel:created:private';
+    await this.messageRedisService.publish(ev, channel);
   }
 }

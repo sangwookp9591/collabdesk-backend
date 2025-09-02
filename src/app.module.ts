@@ -14,7 +14,7 @@ import { MessageModule } from './message/message.module';
 import { SocketStateModule } from './socket-state/socket-state.module';
 import { RedisModule } from './redis/redis.module';
 import { MailModule } from './mail/mail.module';
-import { WebsocketModule } from './websocket/websocket.module';
+import { SocketModule } from './socket/socket.module';
 
 @Module({
   imports: [
@@ -32,7 +32,7 @@ import { WebsocketModule } from './websocket/websocket.module';
     SocketStateModule,
     RedisModule,
     MailModule,
-    WebsocketModule,
+    SocketModule,
   ],
   controllers: [AppController],
   providers: [AppService],

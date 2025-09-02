@@ -21,7 +21,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { InviteWorkspaceDto } from './dto/invite-workspace.dto';
 
 @UseGuards(JwtAuthGuard)
-@Controller('workspace')
+@Controller('workspaces')
 export class WorkspaceController {
   constructor(private readonly workspaceService: WorkspaceService) {}
 
@@ -85,27 +85,16 @@ export class WorkspaceController {
     return await this.workspaceService.getInviteWorkspace(email, code);
   }
 
+  @Get('init/:slug')
+  async workspaceInitBySlug(@Req() req: Request, @Param('slug') slug: string) {
+    console.log('slug :', slug);
+    const userId = req.user.sub;
+    return await this.workspaceService.workspaceInitBySlug(slug, userId);
+  }
+
   @Get(':slug')
   async workspaceBySlug(@Req() req: Request, @Param('slug') slug: string) {
-    console.log('slug :', slug);
-    const userId = req.user?.sub;
-
-    if (!userId) {
-      return {
-        success: false,
-        message: '세션 정보 없음.',
-        data: { workspaces: null, currentWorkspace: null },
-      };
-    } else {
-      const { workspaces, currentWorkspace } =
-        await this.workspaceService.workspaceBySlug(slug, userId);
-
-      return {
-        success: true,
-        message: '워크스페이스 목록 조회 성공.',
-        data: { workspaces, currentWorkspace },
-      };
-    }
+    return await this.workspaceService.workspaceBySlug(slug);
   }
 
   @Post('invite')
@@ -114,10 +103,6 @@ export class WorkspaceController {
     @Body(ValidationPipe) dto: InviteWorkspaceDto,
   ) {
     const userId = req.user?.sub;
-    if (!userId) {
-      throw new UnauthorizedException('이용자 정보가 없습니다.');
-    }
-
     return await this.workspaceService.inviteWorkspace(userId, dto);
   }
 
