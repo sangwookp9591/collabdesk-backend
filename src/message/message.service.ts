@@ -1,23 +1,20 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { GetMessagesQueryDto } from './dto/get-message-by-channel';
-import { WorkspaceService } from 'src/workspace/workspace.service';
-import { ChannelService } from 'src/channel/channel.service';
 import { Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { MessageType } from '@prisma/client';
 
 @Injectable()
 export class MessageService {
   constructor(
     private prisma: PrismaService,
-    private workspaceService: WorkspaceService,
-    private channelService: ChannelService,
     private jwtService: JwtService,
     private configService: ConfigService,
   ) {}
 
-  async create(
+  async createUserMessage(
     userId: string,
     dto: { channelId: string; content: string; parentId?: string },
   ) {
@@ -38,6 +35,20 @@ export class MessageService {
       include: {
         user: { select: userFields },
         replies: true,
+      },
+    });
+  }
+
+  async createMessageWithoutUser(dto: {
+    channelId: string;
+    content: string;
+    messageType: MessageType;
+  }) {
+    return await this.prisma.message.create({
+      data: {
+        channelId: dto.channelId,
+        content: dto.content,
+        messageType: dto.messageType,
       },
     });
   }
@@ -109,19 +120,59 @@ export class MessageService {
     workspaceId: string,
     userId: string,
   ): Promise<boolean> {
-    return await this.workspaceService.isMember(workspaceId, userId);
+    const member = await this.prisma.workspaceMember.findUnique({
+      where: {
+        userId_workspaceId: {
+          userId,
+          workspaceId,
+        },
+      },
+    });
+    return !!member;
   }
 
   async getWorkspaceMember(workspaceId: string, userId: string) {
-    return await this.workspaceService.getWorkspaceMember(workspaceId, userId);
+    const member = await this.prisma.workspaceMember.findUnique({
+      where: {
+        userId_workspaceId: {
+          userId,
+          workspaceId,
+        },
+      },
+    });
+
+    return member;
   }
 
   async isChannelMember(channelId: string, userId: string): Promise<boolean> {
-    return await this.channelService.isMember(channelId, userId);
+    const member = await this.prisma.channelMember.findUnique({
+      where: {
+        userId_channelId: {
+          userId,
+          channelId,
+        },
+      },
+    });
+    return !!member;
   }
 
   async getUserChannels(workspaceId: string, userId: string) {
-    return await this.workspaceService.getUserChannels(workspaceId, userId);
+    return await this.prisma.channel.findMany({
+      where: {
+        workspaceId,
+        members: {
+          some: {
+            userId: userId,
+          },
+        },
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        isPublic: true,
+      },
+    });
   }
 
   authenticateClient(client: Socket): { userId: string; email: string } | null {

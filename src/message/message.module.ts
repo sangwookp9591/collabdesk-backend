@@ -7,8 +7,6 @@ import { MessageController } from './message.controller';
 import { SupabaseModule } from 'src/supabase/supabase.module';
 import { RedisModule } from 'src/redis/redis.module';
 import { MailModule } from 'src/mail/mail.module';
-import { ChannelModule } from 'src/channel/channel.module';
-import { WorkspaceModule } from 'src/workspace/workspace.module';
 @Module({
   imports: [
     PrismaModule,
@@ -17,8 +15,6 @@ import { WorkspaceModule } from 'src/workspace/workspace.module';
     SupabaseModule,
     RedisModule,
     MailModule,
-    ChannelModule,
-    WorkspaceModule,
   ],
   controllers: [MessageController],
   providers: [MessageService],
