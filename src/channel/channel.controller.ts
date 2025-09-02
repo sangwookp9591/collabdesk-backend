@@ -39,7 +39,14 @@ export class ChannelController {
     @Body() createChannelDto: CreateChannelDto,
   ) {
     const userId = req.user.sub;
-    return await this.channelService.create(createChannelDto, userId);
+    const email = req.user?.email;
+    const name = req.user?.name;
+    return await this.channelService.create(
+      createChannelDto,
+      userId,
+      email,
+      name,
+    );
   }
 
   @Get('invite')

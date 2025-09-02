@@ -11,12 +11,15 @@ import { ChannelInviteService } from './channel-invite.service';
 import { InviteChannelDto } from './dto/invite-channel.dto';
 import { InviteExistingMembersDto } from './dto/invite-existing-members.dto';
 import { GetChannelsDto } from './dto/search-channels.dto';
+import { MessageType, WorkspaceMember, WorkspaceRole } from '@prisma/client';
+import { SocketGateway } from 'src/socket/socket.gateway';
 
 @Injectable()
 export class ChannelService {
   constructor(
     private prisma: PrismaService,
     private channelInviteService: ChannelInviteService,
+    private socketGateWay: SocketGateway,
   ) {}
 
   async findMany(userId, dto: GetChannelsDto) {
@@ -45,7 +48,12 @@ export class ChannelService {
     });
   }
 
-  async create(createChannelDto: CreateChannelDto, userId: string) {
+  async create(
+    createChannelDto: CreateChannelDto,
+    userId: string,
+    email: string | undefined,
+    name: string | undefined,
+  ) {
     // 1. 채널 생성
     const slug = await this.generateUniqueChannelSlug(this.prisma);
     const channel = await this.prisma.channel.create({
@@ -62,28 +70,49 @@ export class ChannelService {
     });
 
     // 3. Public 채널이면 기존 워크스페이스 멤버 전원 참여
+    const members: WorkspaceMember[] = [];
     if (channel.isPublic) {
-      const members = await this.prisma.workspaceMember.findMany({
+      const allMembers = await this.prisma.workspaceMember.findMany({
         where: { workspaceId: channel.workspaceId, userId: { not: userId } },
       });
-
-      const joinOps = members.map((member) =>
-        this.prisma.channelMember.upsert({
-          where: {
-            userId_channelId: { userId: member.userId, channelId: channel.id },
-          },
-          update: {},
-          create: {
-            userId: member.userId,
-            channelId: channel.id,
-            role: 'MEMBER',
-          },
-        }),
-      );
-
-      await this.prisma.$transaction(joinOps);
+      members.concat(allMembers);
+    } else {
+      const adminMembers = await this.prisma.workspaceMember.findMany({
+        where: {
+          workspaceId: channel.workspaceId,
+          userId: { not: userId },
+          role: { in: [WorkspaceRole.ADMIN, WorkspaceRole.OWNER] },
+        },
+      });
+      members.concat(adminMembers);
     }
 
+    const joinOps = members.map((member) =>
+      this.prisma.channelMember.upsert({
+        where: {
+          userId_channelId: {
+            userId: member.userId,
+            channelId: channel.id,
+          },
+        },
+        update: {},
+        create: {
+          userId: member.userId,
+          channelId: channel.id,
+          role: 'MEMBER',
+        },
+      }),
+    );
+
+    await this.prisma.$transaction(joinOps);
+    await this.prisma.message.create({
+      data: {
+        content: `${name ? name : email} 외 ${members.length > 0}명이 채널에 참가하였습니다.`,
+        channelId: channel.id,
+        messageType: MessageType.SYSTEM,
+      },
+    });
+    await this.socketGateWay.publishChannelCreated(channel);
     return channel;
   }
 
