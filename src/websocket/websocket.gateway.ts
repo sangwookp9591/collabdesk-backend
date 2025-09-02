@@ -7,11 +7,11 @@ import {
   ConnectedSocket,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { MessageService } from './message.service';
 import { Server, Socket } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
 import { WsJwtAuthGuard } from 'src/jwt-token/guards/ws-jwt-auth.guard';
 import { MessageRedisService } from 'src/redis/message-redis.service';
+import { MessageService } from 'src/message/message.service';
 
 interface AuthenticatedSocket extends Socket {
   data: {
@@ -36,14 +36,14 @@ interface UserConnection {
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
     credentials: true,
   },
-  namespace: '/messages',
+  namespace: '/wsg',
 })
 @UseGuards(WsJwtAuthGuard)
-export class MessageGateway
+export class WebsocketGateway
   implements OnGatewayConnection, OnGatewayDisconnect
 {
   @WebSocketServer() server: Server;
-  private readonly logger = new Logger(MessageGateway.name);
+  private readonly logger = new Logger(WebsocketGateway.name);
 
   constructor(
     private readonly messageService: MessageService,
