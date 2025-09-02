@@ -143,19 +143,23 @@ model ChannelTab {
 }
 
 model Message {
-  id        String    @id @default(cuid())
-  content   String
-  channelId String
-  userId    String
-  parentId  String?
-  editedAt  DateTime?
-  isPinned  Boolean   @default(false)
+  id          String      @id @default(cuid())
+  content     String
+  channelId   String
+  userId      String?
+  parentId    String?
+  editedAt    DateTime?
+  isPinned    Boolean     @default(false)
+  // 새로 추가된 필드들
+  messageType MessageType @default(USER) // 메시지 타입
+  systemData  Json? // 시스템 메시지 추가 데이터
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   channel   Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
   parent    Message?  @relation("MessageThread", fields: [parentId], references: [id])
   replies   Message[] @relation("MessageThread")
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("messages")
 }
@@ -195,6 +199,12 @@ model ChannelInvite {
 
   @@unique([email, channelId])
   @@map("channel_invites")
+}
+
+enum MessageType {
+  USER // 일반 사용자 메시지
+  SYSTEM // 시스템 메시지 (채널 참가/탈퇴 등)
+  BOT // 봇 메시지 (필요시)
 }
 
 enum UserStatus {
