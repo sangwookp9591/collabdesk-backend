@@ -13,6 +13,8 @@ import { WsJwtAuthGuard } from 'src/jwt-token/guards/ws-jwt-auth.guard';
 import { MessageRedisService } from 'src/redis/message-redis.service';
 import { MessageService } from 'src/message/message.service';
 import { Channel } from '@prisma/client';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 
 interface AuthenticatedSocket extends Socket {
   data: {
@@ -47,6 +49,8 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private readonly messageService: MessageService,
     private readonly messageRedisService: MessageRedisService,
+    private jwtService: JwtService,
+    private configService: ConfigService,
   ) {}
 
   onModuleInit() {
@@ -90,7 +94,7 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
   async handleConnection(client: AuthenticatedSocket) {
-    const auth = this.messageService.authenticateClient(client);
+    const auth = this.authenticateClient(client);
     if (!auth) {
       client.disconnect();
       return;
@@ -116,7 +120,7 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   async handleDisconnect(client: AuthenticatedSocket) {
-    const auth = this.messageService.authenticateClient(client);
+    const auth = this.authenticateClient(client);
     if (!auth) return;
     const connection = await this.messageRedisService.getUserConnection(
       auth.userId,
@@ -204,7 +208,7 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
     dto: { channelId: string; content: string; parentId?: string },
   ) {
     const userId = client.data.user.sub;
-    const newMessage = await this.messageService.create(userId, dto);
+    const newMessage = await this.messageService.createUserMessage(userId, dto);
     await this.messageRedisService.publish(
       `channel:${dto.channelId}`,
       newMessage,
@@ -217,5 +221,22 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
       ? 'channel:created:public'
       : 'channel:created:private';
     await this.messageRedisService.publish(ev, channel);
+  }
+
+  private authenticateClient(
+    client: Socket,
+  ): { userId: string; email: string } | null {
+    const token = client.handshake.auth?.token;
+    if (!token) return null;
+
+    try {
+      const payload = this.jwtService.verify(token, {
+        secret: this.configService.get('JWT_ACCESS_SECRET'),
+      });
+      return { userId: payload.sub, email: payload.email };
+    } catch (err) {
+      console.log('err : ', err);
+      return null;
+    }
   }
 }

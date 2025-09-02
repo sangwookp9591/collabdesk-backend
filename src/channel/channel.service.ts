@@ -12,14 +12,14 @@ import { InviteChannelDto } from './dto/invite-channel.dto';
 import { InviteExistingMembersDto } from './dto/invite-existing-members.dto';
 import { GetChannelsDto } from './dto/search-channels.dto';
 import { MessageType, WorkspaceMember, WorkspaceRole } from '@prisma/client';
-import { SocketGateway } from 'src/socket/socket.gateway';
+import { SocketService } from 'src/socket/socket.service';
 
 @Injectable()
 export class ChannelService {
   constructor(
     private prisma: PrismaService,
     private channelInviteService: ChannelInviteService,
-    private socketGateWay: SocketGateway,
+    private SocketService: SocketService,
   ) {}
 
   async findMany(userId, dto: GetChannelsDto) {
@@ -107,12 +107,12 @@ export class ChannelService {
     await this.prisma.$transaction(joinOps);
     await this.prisma.message.create({
       data: {
-        content: `${name ? name : email} 외 ${members.length > 0}명이 채널에 참가하였습니다.`,
+        content: `${name ? name : email} 외 ${members.length > 0 ? members.length : `0`}명이 채널에 참가하였습니다.`,
         channelId: channel.id,
         messageType: MessageType.SYSTEM,
       },
     });
-    await this.socketGateWay.publishChannelCreated(channel);
+    await this.SocketService.publishChannelCreated(channel);
     return channel;
   }
 
