@@ -126,8 +126,8 @@ export class ChannelController {
     return await this.channelService.removeBySlug(slug, userId);
   }
 
-  @Get(':slug/members')
-  async getMembersBySlug(@Param('slug') slug: string) {
-    return await this.channelService.getMembersBySlug(slug);
+  @Get(':id/members')
+  async getMembersById(@Param('id') id: string) {
+    return await this.channelService.getMembersById(id);
   }
 }

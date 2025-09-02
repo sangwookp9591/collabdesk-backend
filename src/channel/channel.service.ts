@@ -223,6 +223,32 @@ export class ChannelService {
     });
   }
 
+  async getMembersById(id: string) {
+    const channel = await this.prisma.channel.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        id: true,
+      },
+    });
+    return await this.prisma.channelMember.findMany({
+      where: {
+        channelId: channel?.id,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            profileImageUrl: true,
+          },
+        },
+      },
+    });
+  }
+
   async inviteChannel(userId: string, dto: InviteChannelDto) {
     return await this.channelInviteService.inviteChannel(userId, dto);
   }

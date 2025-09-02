@@ -117,8 +117,8 @@ export class WorkspaceController {
     return await this.workspaceService.joinWorkspaceByCode(userId, email, code);
   }
 
-  @Get(':slug/members')
-  async getMembersBySlug(@Param('slug') slug: string) {
-    return await this.workspaceService.getMembersBySlug(slug);
+  @Get(':id/members')
+  async getMembersById(@Param('id') id: string) {
+    return await this.workspaceService.getMembersById(id);
   }
 }

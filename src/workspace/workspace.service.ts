@@ -225,10 +225,10 @@ export class WorkspaceService {
     });
   }
 
-  async getMembersBySlug(slug: string) {
+  async getMembersById(id: string) {
     const workspace = await this.prisma.workspace.findUnique({
       where: {
-        slug,
+        id,
       },
       select: {
         id: true,
