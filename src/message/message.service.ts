@@ -112,6 +112,10 @@ export class MessageService {
     return await this.workspaceService.isMember(workspaceId, userId);
   }
 
+  async getWorkspaceMember(workspaceId: string, userId: string) {
+    return await this.workspaceService.getWorkspaceMember(workspaceId, userId);
+  }
+
   async isChannelMember(channelId: string, userId: string): Promise<boolean> {
     return await this.channelService.isMember(channelId, userId);
   }
