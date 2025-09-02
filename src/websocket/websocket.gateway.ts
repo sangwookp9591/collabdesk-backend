@@ -12,6 +12,7 @@ import { Logger, UseGuards } from '@nestjs/common';
 import { WsJwtAuthGuard } from 'src/jwt-token/guards/ws-jwt-auth.guard';
 import { MessageRedisService } from 'src/redis/message-redis.service';
 import { MessageService } from 'src/message/message.service';
+import { Channel } from '@prisma/client';
 
 interface AuthenticatedSocket extends Socket {
   data: {
@@ -49,6 +50,23 @@ export class WebsocketGateway
     private readonly messageService: MessageService,
     private readonly messageRedisService: MessageRedisService,
   ) {}
+
+  onModuleInit() {
+    this.setUpRedisSubscriptions();
+  }
+
+  private setUpRedisSubscriptions() {
+    // 채널 생성 이벤트 구독
+    this.messageRedisService.subscribeChannel(
+      'channel:created',
+      (message: Channel) => {
+        this.logger.log('채널 생성 이벤트 ');
+        this.server
+          .to(`workspace:${message.workspaceId}`)
+          .emit('channelCreated', message);
+      },
+    );
+  }
 
   afterInit() {}
 
@@ -147,6 +165,25 @@ export class WebsocketGateway
     });
   }
 
+  @SubscribeMessage('joinChannel')
+  async handleJoinChannel(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload: { workspaceId: string; channelId: string },
+  ) {
+    const userId = client.data.user.sub;
+    const isMember = await this.messageService.isWorkspaceMember(
+      payload.workspaceId,
+      userId,
+    );
+
+    if (!isMember) {
+      client.emit('error', { message: 'Access denied to workspace' });
+      return;
+    }
+
+    await this.messageRedisService.addUserToChannel(payload.channelId, userId);
+  }
+
   @SubscribeMessage('sendMessage')
   async sendMessage(
     @ConnectedSocket() client: AuthenticatedSocket,
@@ -159,5 +196,10 @@ export class WebsocketGateway
       `channel:${dto.channelId}`,
       newMessage,
     );
+  }
+
+  // 외부 호출 이벤트
+  async publishChannelCreated(channel: Channel) {
+    await this.messageRedisService.publish('channel:created', channel);
   }
 }
