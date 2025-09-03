@@ -15,6 +15,7 @@ import { SocketStateModule } from './socket-state/socket-state.module';
 import { RedisModule } from './redis/redis.module';
 import { MailModule } from './mail/mail.module';
 import { SocketModule } from './socket/socket.module';
+import { InviteModule } from './invite/invite.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { SocketModule } from './socket/socket.module';
     RedisModule,
     MailModule,
     SocketModule,
+    InviteModule,
   ],
   controllers: [AppController],
   providers: [AppService],

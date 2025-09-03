@@ -5,15 +5,12 @@ import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { SupabaseService } from '../supabase/supabase.service';
 import { generateImagePath } from 'src/common/utils/image-path';
 import { Prisma } from '@prisma/client';
-import { InviteWorkspaceDto } from './dto/invite-workspace.dto';
-import { WorkspaceInviteService } from './workspace-invite.service';
 
 @Injectable()
 export class WorkspaceService {
   constructor(
     private prisma: PrismaService,
     private supabase: SupabaseService,
-    private workspaceInviteService: WorkspaceInviteService,
   ) {}
 
   async findManyByUserId(userId: string) {
@@ -392,21 +389,5 @@ export class WorkspaceService {
         },
       },
     });
-  }
-
-  async inviteWorkspace(userId: string, dto: InviteWorkspaceDto) {
-    return await this.workspaceInviteService.inviteWorkspace(userId, dto);
-  }
-
-  async getInviteWorkspace(email: string, code: string) {
-    return await this.workspaceInviteService.getInviteWorkspace(email, code);
-  }
-
-  async joinWorkspaceByCode(userId: string, email: string, code: string) {
-    return await this.workspaceInviteService.joinWorkspaceByCode(
-      userId,
-      email,
-      code,
-    );
   }
 }

@@ -7,9 +7,6 @@ import { CreateChannelDto } from './dto/create-channel.dto';
 import { UpdateChannelDto } from './dto/update-channel.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { nanoid } from 'nanoid';
-import { ChannelInviteService } from './channel-invite.service';
-import { InviteChannelDto } from './dto/invite-channel.dto';
-import { InviteExistingMembersDto } from './dto/invite-existing-members.dto';
 import { GetChannelsDto } from './dto/search-channels.dto';
 import {
   ChannelRole,
@@ -23,7 +20,6 @@ import { SocketService } from 'src/socket/socket.service';
 export class ChannelService {
   constructor(
     private prisma: PrismaService,
-    private channelInviteService: ChannelInviteService,
     private SocketService: SocketService,
   ) {}
 
@@ -321,25 +317,6 @@ export class ChannelService {
     });
   }
 
-  async inviteChannel(userId: string, dto: InviteChannelDto) {
-    return await this.channelInviteService.inviteChannel(userId, dto);
-  }
-
-  async inviteExistingMembers(dto: InviteExistingMembersDto) {
-    return await this.channelInviteService.inviteExistingMembers(dto);
-  }
-
-  async getInviteChannel(email: string, code: string) {
-    return await this.channelInviteService.getInviteChannel(email, code);
-  }
-
-  async joinChannelByCode(userId: string, email: string, code: string) {
-    return await this.channelInviteService.joinChannelByCode(
-      userId,
-      email,
-      code,
-    );
-  }
   private async generateUniqueChannelSlug(prisma: PrismaService) {
     while (true) {
       const slug = nanoid(8); // 8자리 랜덤 ID
