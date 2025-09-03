@@ -136,6 +136,32 @@ export class WorkspaceService {
     }
   }
 
+  async getWorkspaceMembers(slug: string) {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: {
+        slug: slug,
+      },
+    });
+
+    if (!workspace) {
+      throw new NotFoundException('워크스페이스를 찾지 못함');
+    }
+    return await this.prisma.workspaceMember.findMany({
+      where: {
+        workspaceId: workspace.id,
+      },
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true,
+            profileImageUrl: true,
+          },
+        },
+      },
+    });
+  }
+
   async getMyMembership(slug: string, userId: string) {
     const workspace = await this.prisma.workspace.findUnique({
       where: {
@@ -150,6 +176,34 @@ export class WorkspaceService {
       where: {
         userId_workspaceId: {
           userId,
+          workspaceId: workspace.id,
+        },
+      },
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true,
+            profileImageUrl: true,
+          },
+        },
+      },
+    });
+  }
+  async getWorkspaceMemberById(slug: string, memberId: string) {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: {
+        slug: slug,
+      },
+    });
+
+    if (!workspace) {
+      throw new NotFoundException('워크스페이스를 찾지 못함');
+    }
+    return await this.prisma.workspaceMember.findUnique({
+      where: {
+        userId_workspaceId: {
+          userId: memberId,
           workspaceId: workspace.id,
         },
       },
