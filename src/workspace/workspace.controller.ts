@@ -71,7 +71,19 @@ export class WorkspaceController {
     }
   }
 
-  @Get('invite')
+  @Get(':slug/members/me')
+  async getMyMembership(@Req() req: Request, @Param('slug') slug: string) {
+    const userId = req.user.sub;
+    return this.workspaceService.getMyMembership(slug, userId);
+  }
+
+  @Get(':slug/stats')
+  async getWorkspaceStats(@Req() req: Request, @Param('slug') slug: string) {
+    const userId = req.user.sub;
+    return await this.workspaceService.getWorkspaceStats(slug, userId);
+  }
+
+  @Get('/membinvite')
   async getInviteWorkspace(@Req() req: Request, @Query('code') code: string) {
     const email = req.user?.email;
     if (!email) {

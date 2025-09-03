@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { nanoid } from 'nanoid';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
@@ -136,15 +136,104 @@ export class WorkspaceService {
     }
   }
 
+  async getMyMembership(slug: string, userId: string) {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: {
+        slug: slug,
+      },
+    });
+
+    if (!workspace) {
+      throw new NotFoundException('워크스페이스를 찾지 못함');
+    }
+    return await this.prisma.workspaceMember.findUnique({
+      where: {
+        userId_workspaceId: {
+          userId,
+          workspaceId: workspace.id,
+        },
+      },
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true,
+            profileImageUrl: true,
+          },
+        },
+      },
+    });
+  }
+
+  async getWorkspaceStats(slug: string, userId: string) {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: {
+        slug,
+      },
+      include: {
+        members: {
+          include: {
+            user: {
+              select: {
+                status: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!workspace)
+      throw new NotFoundException('워크스페이스를 찾을 수 없습니다.');
+
+    const member = await this.prisma.workspaceMember.findUnique({
+      where: {
+        userId_workspaceId: {
+          userId,
+          workspaceId: workspace.id,
+        },
+      },
+    });
+
+    if (!member) throw new NotFoundException('워크스페이스를 멤버가 아닙니다.');
+
+    const [channelCount, messageCount] = await Promise.all([
+      this.prisma.channel.count({
+        where: { workspaceId: workspace.id },
+      }),
+      this.prisma.message.count({
+        where: {
+          channel: { workspaceId: workspace.id },
+        },
+      }),
+    ]);
+
+    const onlineMembers = workspace.members.filter(
+      (member) => member.user.status === 'ONLINE',
+    ).length;
+
+    return {
+      totalChannels: channelCount,
+      totalMembers: workspace.members.length,
+      totalMessages: messageCount,
+      onlineMembers,
+    };
+  }
+
   async workspaceBySlug(slug: string) {
-    return await this.prisma.workspace.findUnique({
+    const workspace = await this.prisma.workspace.findUnique({
       where: {
         slug: slug,
       },
       include: {
-        channels: true,
+        _count: {
+          select: {
+            members: true,
+          },
+        },
       },
     });
+
+    return { ...workspace, memberCount: workspace?._count.members };
   }
 
   async workspaceInitBySlug(slug: string, userId: string) {
