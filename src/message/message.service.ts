@@ -46,10 +46,10 @@ export class MessageService {
     });
   }
 
-  async getRecentMessages(userId: string, workspaceSlug: string, take: number) {
+  async getRecentMessages(userId: string, slug: string, take: number) {
     const workspace = await this.prisma.workspace.findUnique({
       where: {
-        slug: workspaceSlug,
+        slug: slug,
       },
     });
     if (!workspace) {

@@ -29,14 +29,14 @@ export class MessageController {
   @Get('workspaces/:slug/messages/recent')
   async getRecentMessages(
     @Req() req: Request,
-    @Query('workspaceSlug') workspaceSlug: string,
-    @Query('take') take?: string,
+    @Param('slug') slug: string,
+    @Query('take') take: string = '10',
   ) {
     const userId = req.user.sub;
     return await this.messageService.getRecentMessages(
       userId,
-      workspaceSlug,
-      Number(take ?? 10),
+      slug,
+      parseInt(take),
     );
   }
 
