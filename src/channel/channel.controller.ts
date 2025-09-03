@@ -49,6 +49,16 @@ export class ChannelController {
     );
   }
 
+  @Get('my')
+  async getMyChannels(
+    @Req() req: Request,
+    @Query('workspaceSlug') workspaceSlug: string,
+  ) {
+    const userId = req.user?.sub;
+
+    return await this.channelService.getMyChaneels(userId, workspaceSlug);
+  }
+
   @Get('invite')
   async getInviteChannel(@Req() req: Request, @Query('code') code: string) {
     const email = req.user?.email;
@@ -120,10 +130,10 @@ export class ChannelController {
     );
   }
 
-  @Delete(':slug')
-  async removeBySlug(@Req() req: Request, @Param('slug') slug: string) {
+  @Delete(':id')
+  async removeBySlug(@Req() req: Request, @Param('id') id: string) {
     const userId = req.user.sub;
-    return await this.channelService.removeBySlug(slug, userId);
+    return await this.channelService.removeBySlug(id, userId);
   }
 
   @Get(':id/members')

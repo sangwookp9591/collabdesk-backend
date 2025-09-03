@@ -11,7 +11,12 @@ import { ChannelInviteService } from './channel-invite.service';
 import { InviteChannelDto } from './dto/invite-channel.dto';
 import { InviteExistingMembersDto } from './dto/invite-existing-members.dto';
 import { GetChannelsDto } from './dto/search-channels.dto';
-import { MessageType, WorkspaceMember, WorkspaceRole } from '@prisma/client';
+import {
+  ChannelRole,
+  MessageType,
+  WorkspaceMember,
+  WorkspaceRole,
+} from '@prisma/client';
 import { SocketService } from 'src/socket/socket.service';
 
 @Injectable()
@@ -21,6 +26,44 @@ export class ChannelService {
     private channelInviteService: ChannelInviteService,
     private SocketService: SocketService,
   ) {}
+
+  async getMyChaneels(userId: string, workspaceSlug: string) {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: {
+        slug: workspaceSlug,
+      },
+    });
+    if (!workspace) {
+      throw new NotFoundException('해당 워크스페이스가 존재하지 않습니다.');
+    }
+    const channels = await this.prisma.channel.findMany({
+      where: {
+        workspaceId: workspace.id,
+        OR: [
+          {
+            members: {
+              some: {
+                userId: userId,
+              },
+            },
+          },
+        ],
+      },
+      include: {
+        _count: {
+          select: {
+            members: true,
+          },
+        },
+      },
+      orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+    });
+
+    return channels.map((channel) => ({
+      ...channel,
+      memberCount: channel._count.members,
+    }));
+  }
 
   async findMany(userId, dto: GetChannelsDto) {
     const {
@@ -157,10 +200,18 @@ export class ChannelService {
     });
   }
 
-  async removeBySlug(slug: string, userId: string) {
+  async removeBySlug(channelId: string, userId: string) {
+    const channelMember = await this.prisma.channelMember.findUnique({
+      where: {
+        userId_channelId: { userId, channelId },
+      },
+      select: {
+        role: true,
+      },
+    });
     const channel = await this.prisma.channel.findUnique({
       where: {
-        slug: slug,
+        id: channelId,
       },
     });
 
@@ -171,18 +222,39 @@ export class ChannelService {
     if (channel.isDefault) {
       throw new ForbiddenException('기본 채널은 삭제할 수 없습니다.');
     }
+    const workspaceMember = await this.prisma.workspaceMember.findUnique({
+      where: {
+        userId_workspaceId: { userId, workspaceId: channel?.workspaceId },
+      },
+      select: {
+        role: true,
+      },
+    });
 
-    if (channel.createdById !== userId) {
+    if (
+      !(
+        workspaceMember?.role === WorkspaceRole.OWNER ||
+        workspaceMember?.role === WorkspaceRole.ADMIN ||
+        channelMember?.role === ChannelRole.ADMIN
+      )
+    ) {
       throw new ForbiddenException('채널 삭제할수 없는 유저');
     }
 
-    await this.prisma.channel.delete({
+    const deleteChannel = await this.prisma.channel.delete({
       where: {
         id: channel?.id,
       },
     });
 
-    return { success: true, message: '삭제 성공', data: null };
+    await this.SocketService.publishChannelDelete({
+      workspaceId: deleteChannel.workspaceId,
+      channelId: deleteChannel.id,
+      userId: userId,
+      message: `${userId}에 의해 ${deleteChannel.name} 채널 삭제`,
+    });
+
+    return deleteChannel;
   }
 
   async isMember(channelId: string, userId: string): Promise<boolean> {
