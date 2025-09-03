@@ -111,6 +111,7 @@ export class WorkspaceInviteService {
 
       await this.mailService.sendWorkspaceInvite({
         to: email,
+        slug: updateWorkspaceInvite.workspace?.slug,
         inviterName: inviterUser?.name || '',
         workspaceName: updateWorkspaceInvite.workspace.name,
         code,
@@ -145,6 +146,7 @@ export class WorkspaceInviteService {
       });
       await this.mailService.sendWorkspaceInvite({
         to: email,
+        slug: workspaceInvite.workspace.slug,
         inviterName: inviterUser?.name || '',
         workspaceName: workspaceInvite.workspace.name,
         code,

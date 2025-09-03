@@ -107,6 +107,7 @@ export class ChannelInviteService {
               workspace: {
                 select: {
                   id: true,
+                  slug: true,
                   name: true,
                 },
               },
@@ -133,6 +134,7 @@ export class ChannelInviteService {
 
       await this.mailService.sendChannelInvite({
         to: email,
+        slug: updateChannelInvite.channel.workspace.slug,
         inviterName: inviterUser?.name || '',
         workspaceName: updateChannelInvite.channel.workspace.name,
         channelName: updateChannelInvite.channel.name,
@@ -156,6 +158,7 @@ export class ChannelInviteService {
               workspace: {
                 select: {
                   id: true,
+                  slug: true,
                   name: true,
                 },
               },
@@ -182,6 +185,7 @@ export class ChannelInviteService {
 
       await this.mailService.sendChannelInvite({
         to: email,
+        slug: channelInvite.channel.workspace.slug,
         inviterName: inviterUser?.name || '',
         workspaceName: channelInvite.channel.workspace.name,
         channelName: channelInvite.channel.name,

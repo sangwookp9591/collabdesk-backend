@@ -4,6 +4,7 @@ import * as nodemailer from 'nodemailer';
 
 export interface WorkspaceInviteEmailData {
   to: string;
+  slug: string;
   inviterName: string;
   workspaceName: string;
   code: string;
@@ -12,6 +13,7 @@ export interface WorkspaceInviteEmailData {
 
 export interface ChannelInviteEmailData {
   to: string;
+  slug: string;
   inviterName: string;
   channelName: string;
   workspaceName: string;
@@ -55,9 +57,9 @@ export class MailService {
 
   // 워크스페이스 초대 이메일 발송
   async sendWorkspaceInvite(data: WorkspaceInviteEmailData): Promise<void> {
-    const { to, inviterName, workspaceName, code, expiresAt } = data;
+    const { to, slug, inviterName, workspaceName, code, expiresAt } = data;
 
-    const inviteUrl = `${this.configService.get('FRONTEND_URL')}/onboarding/invite?type=workspace&code=${code}`;
+    const inviteUrl = `${this.configService.get('FRONTEND_URL')}/onboarding/invite?type=workspaces&code=${code}&slug=${slug}`;
     const expiresAtFormatted = expiresAt.toLocaleDateString('ko-KR', {
       year: 'numeric',
       month: 'long',
@@ -105,6 +107,7 @@ export class MailService {
   async sendChannelInvite(data: ChannelInviteEmailData): Promise<void> {
     const {
       to,
+      slug,
       inviterName,
       channelName,
       workspaceName,
@@ -113,7 +116,7 @@ export class MailService {
       isGuestInvite,
     } = data;
 
-    const inviteUrl = `${this.configService.get('FRONTEND_URL')}/onboarding/invite?type=channel&code=${code}`;
+    const inviteUrl = `${this.configService.get('FRONTEND_URL')}/onboarding/invite?type=channels&code=${code}&slug=${slug}`;
     const expiresAtFormatted = expiresAt.toLocaleDateString('ko-KR', {
       year: 'numeric',
       month: 'long',
