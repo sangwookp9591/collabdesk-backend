@@ -18,4 +18,13 @@ export class SocketService {
   async publishMessage(channelId: string, message: Message) {
     await this.messageRedisService.publish(`channel:${channelId}`, message);
   }
+
+  async publishChannelDelete(message: {
+    workspaceId: string;
+    channelId: string;
+    userId: string;
+    message: string;
+  }) {
+    await this.messageRedisService.publish('channel:delete', message);
+  }
 }

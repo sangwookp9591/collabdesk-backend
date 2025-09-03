@@ -69,6 +69,21 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
       },
     );
 
+    this.messageRedisService.subscribeChannel(
+      'channel:delete',
+      (message: {
+        workspaceId: string;
+        channelId: string;
+        userId: string;
+        message: string;
+      }) => {
+        this.logger.log('채널 삭제 이벤트 ');
+        this.server
+          .to(`workspace:${message.workspaceId}`)
+          .emit('channelDeleted', message);
+      },
+    );
+
     // 채널 생성 이벤트 구독
     this.messageRedisService.subscribeChannel(
       'channel:created:private',
