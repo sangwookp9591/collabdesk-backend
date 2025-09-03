@@ -46,6 +46,48 @@ export class MessageService {
     });
   }
 
+  async getRecentMessages(userId: string, workspaceSlug: string, take: number) {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: {
+        slug: workspaceSlug,
+      },
+    });
+    if (!workspace) {
+      throw new NotFoundException('워크스페이스가 존재하지 않습니다.');
+    }
+    return await this.prisma.message.findMany({
+      where: {
+        channel: {
+          workspaceId: workspace.id,
+          members: {
+            some: {
+              userId: userId,
+            },
+          },
+        },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            profileImageUrl: true,
+            email: true,
+          },
+        },
+        channel: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: take,
+    });
+  }
+
   /**
    * 채널 메시지 조회 (무한스크롤용)
    * @param slug 채널 slug
