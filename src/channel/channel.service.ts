@@ -61,17 +61,11 @@ export class ChannelService {
     }));
   }
 
-  async findMany(userId, dto: GetChannelsDto) {
-    const {
-      workspaceId,
-      search,
-      orderBy = 'createdAt',
-      page = 1,
-      take = 20,
-    } = dto;
+  async findMany(userId, workspaceSlug, dto: GetChannelsDto) {
+    const { search, orderBy = 'createdAt', page = 1, take = 20 } = dto;
     return await this.prisma.channel.findMany({
       where: {
-        workspaceId: workspaceId,
+        slug: workspaceSlug,
         name: search ? { contains: search } : undefined,
         members: {
           some: {
@@ -196,24 +190,24 @@ export class ChannelService {
     });
   }
 
-  async removeBySlug(channelId: string, userId: string) {
+  async removeBySlug(slug: string, userId: string) {
+    const channel = await this.prisma.channel.findUnique({
+      where: {
+        slug: slug,
+      },
+    });
+    if (!channel) {
+      throw new NotFoundException('채널을 찾을 수 없습니다.');
+    }
+
     const channelMember = await this.prisma.channelMember.findUnique({
       where: {
-        userId_channelId: { userId, channelId },
+        userId_channelId: { userId, channelId: channel.id },
       },
       select: {
         role: true,
       },
     });
-    const channel = await this.prisma.channel.findUnique({
-      where: {
-        id: channelId,
-      },
-    });
-
-    if (!channel) {
-      throw new NotFoundException('채널을 찾을 수 없습니다.');
-    }
 
     if (channel.isDefault) {
       throw new ForbiddenException('기본 채널은 삭제할 수 없습니다.');
@@ -291,18 +285,25 @@ export class ChannelService {
     });
   }
 
-  async getMembersById(id: string) {
+  async getMemberByMemberId(slug: string, memberId: string) {
     const channel = await this.prisma.channel.findUnique({
       where: {
-        id,
+        slug,
       },
       select: {
         id: true,
       },
     });
-    return await this.prisma.channelMember.findMany({
+
+    if (!channel) {
+      throw new NotFoundException('채널을 찾을 수 없습니다.');
+    }
+    return await this.prisma.channelMember.findUnique({
       where: {
-        channelId: channel?.id,
+        userId_channelId: {
+          userId: memberId,
+          channelId: channel.id,
+        },
       },
       include: {
         user: {

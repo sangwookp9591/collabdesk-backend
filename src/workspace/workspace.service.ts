@@ -117,6 +117,18 @@ export class WorkspaceService {
     });
   }
 
+  async getUserWorkspaces(userId: string) {
+    return await this.prisma.workspace.findMany({
+      where: {
+        members: {
+          some: {
+            userId,
+          },
+        },
+      },
+    });
+  }
+
   private async generateUniqueWorkspaceSlug(tx: Prisma.TransactionClient) {
     while (true) {
       const slug = nanoid(8); // 8자리 랜덤 ID

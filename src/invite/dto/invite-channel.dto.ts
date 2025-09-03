@@ -7,13 +7,16 @@ export class InviteChannelDto {
   @IsEmail()
   email: string;
 
-  @ApiProperty({ example: '워크스페이스 id', description: '워크스페이스 id' })
-  @IsNotEmpty({ message: '워크스페이스 아이디는 필수값입니다.' })
-  workspaceId: string;
+  @ApiProperty({
+    example: '워크스페이스 Slug',
+    description: '워크스페이스 Slug',
+  })
+  @IsNotEmpty({ message: '워크스페이스 Slug 필수값입니다.' })
+  workspaceSlug: string;
 
-  @ApiProperty({ example: '채널 id', description: '채널 id' })
-  @IsNotEmpty({ message: '채널 아이디는 필수값입니다.' })
-  channelId: string;
+  @ApiProperty({ example: '채널 Slug', description: '채널 Slug' })
+  @IsNotEmpty({ message: '채널 Slug 필수값입니다.' })
+  channelSlug: string;
 
   @ApiProperty({ example: 'MEMBER', description: 'Channel Role MEMBER' })
   @IsNotEmpty({ message: '채널 역할값은  필수값입니다.' })

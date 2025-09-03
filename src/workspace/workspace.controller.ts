@@ -51,20 +51,13 @@ export class WorkspaceController {
   ) {
     const userId = req.user?.sub;
 
-    if (!userId) {
-      return {
-        success: false,
-        message: '세션 정보 없음.',
-        data: { workspace: null },
-      };
-    } else {
-      const workspace = await this.workspaceService.create(dto, userId, image);
-      return {
-        success: true,
-        message: '워크스페이스 생성 성공.',
-        data: { workspace: workspace },
-      };
-    }
+    return await this.workspaceService.create(dto, userId, image);
+  }
+
+  @Get()
+  async getUserWorkspaces(@Req() req: Request) {
+    const userId = req.user.sub;
+    return this.workspaceService.getUserWorkspaces(userId);
   }
 
   @Get(':slug/members')

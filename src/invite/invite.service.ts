@@ -260,7 +260,7 @@ export class InviteService {
 
   // 채널 초대 생성
   async inviteChannel(userId: string, dto: InviteChannelDto) {
-    const { email, workspaceId, channelId, channelRole } = dto;
+    const { email, workspaceSlug, channelSlug, channelRole } = dto;
     const inviterUser = await this.prisma.user.findUnique({
       where: {
         id: userId,
@@ -271,11 +271,34 @@ export class InviteService {
       throw new NotFoundException('초대를 할 수 없는 유저입니다.');
     }
 
+    const workspace = await this.prisma.workspace.findUnique({
+      where: {
+        slug: workspaceSlug,
+      },
+    });
+
+    if (!workspace) {
+      throw new NotFoundException('워크스페이스가 존재하지 않습니다.');
+    }
+
+    const channel = await this.prisma.channel.findUnique({
+      where: {
+        slug: channelSlug,
+      },
+    });
+
+    if (!channel) {
+      throw new NotFoundException('채널이 존재하지 않습니다.');
+    }
+
     const isUser = await this.prisma.user.findUnique({
       where: {
         email,
       },
     });
+
+    const workspaceId = workspace?.id;
+    const channelId = channel?.id;
 
     if (isUser) {
       //해당 워크스페이스가 이미 초대되어 있는지
@@ -283,7 +306,7 @@ export class InviteService {
         where: {
           userId_workspaceId: {
             userId: isUser?.id,
-            workspaceId,
+            workspaceId: workspace?.id,
           },
         },
       });
@@ -292,7 +315,7 @@ export class InviteService {
           where: {
             userId_channelId: {
               userId: isUser?.id,
-              channelId,
+              channelId: channel?.id,
             },
           },
         });
@@ -431,16 +454,26 @@ export class InviteService {
   }
 
   async inviteExistingMembers(dto: InviteExistingMembersDto) {
-    const { members } = dto;
+    const { members, channelSlug } = dto;
 
-    console.log('members', members);
+    const channel = await this.prisma.channel.findUnique({
+      where: {
+        slug: channelSlug,
+      },
+    });
+
+    if (!channel) {
+      throw new NotFoundException('채널이 존재하지 않습니다.');
+    }
+    const channelId = channel.id;
+
     try {
       await this.prisma.$transaction(
         members.map((member) =>
           this.prisma.channelMember.create({
             data: {
               userId: member.userId,
-              channelId: member.channelId,
+              channelId: channelId,
               role: member.role,
             },
           }),
@@ -468,7 +501,7 @@ export class InviteService {
     });
   }
 
-  async joinChannelByCode(userId: string, email, code: string) {
+  async joinChannelByCode(userId: string, email: string, code: string) {
     const invite = await this.validateCode(code);
 
     if (invite.email !== email) {

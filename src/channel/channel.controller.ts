@@ -17,15 +17,19 @@ import { JwtAuthGuard } from 'src/jwt-token/guards/jwt-auth.guard';
 import type { Request } from 'express';
 import { GetChannelsDto } from './dto/search-channels.dto';
 
-@Controller('channel')
+@Controller('workspaces/:workspaceSlug/channels')
 @UseGuards(JwtAuthGuard)
 export class ChannelController {
   constructor(private readonly channelService: ChannelService) {}
 
   @Get()
-  async findMany(@Req() req: Request, @Query() dto: GetChannelsDto) {
+  async findMany(
+    @Req() req: Request,
+    @Param('workspaceSlug') workspaceSlug: string,
+    @Query() dto: GetChannelsDto,
+  ) {
     const userId = req.user.id;
-    return await this.channelService.findMany(userId, dto);
+    return await this.channelService.findMany(userId, workspaceSlug, dto);
   }
 
   @Post()
@@ -47,7 +51,7 @@ export class ChannelController {
   @Get('my')
   async getMyChannels(
     @Req() req: Request,
-    @Query('workspaceSlug') workspaceSlug: string,
+    @Param('workspaceSlug') workspaceSlug: string,
   ) {
     const userId = req.user?.sub;
 
@@ -73,14 +77,22 @@ export class ChannelController {
     );
   }
 
-  @Delete(':id')
-  async removeBySlug(@Req() req: Request, @Param('id') id: string) {
+  @Delete(':slug')
+  async removeBySlug(@Req() req: Request, @Param('slug') slug: string) {
     const userId = req.user.sub;
-    return await this.channelService.removeBySlug(id, userId);
+    return await this.channelService.removeBySlug(slug, userId);
   }
 
-  @Get(':id/members')
-  async getMembersById(@Param('id') id: string) {
-    return await this.channelService.getMembersById(id);
+  @Get(':slug/members')
+  async getMembersBySlug(@Param('slug') slug: string) {
+    return await this.channelService.getMembersBySlug(slug);
+  }
+
+  @Get(':slug/members/:memberId')
+  async getMemberById(
+    @Param('slug') slug: string,
+    @Param('memberId') memberId: string,
+  ) {
+    return await this.channelService.getMemberByMemberId(slug, memberId);
   }
 }

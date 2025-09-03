@@ -2,10 +2,6 @@ import { IsOptional, IsString, IsNumber } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class GetChannelsDto {
-  @ApiPropertyOptional({ description: '워크스페이스 ID' })
-  @IsString()
-  workspaceId: string;
-
   @ApiPropertyOptional({ description: '페이지 번호', example: 1 })
   @IsOptional()
   @IsNumber()
