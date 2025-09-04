@@ -5,7 +5,7 @@ import {
   Req,
   UseGuards,
   Body,
-  UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { JwtAuthGuard } from 'src/jwt-token/guards/jwt-auth.guard';
@@ -14,12 +14,14 @@ import type { Request, Response } from 'express';
 @Controller('user')
 @UseGuards(JwtAuthGuard)
 export class UserController {
+  private readonly logger = new Logger(UserController.name);
   constructor(private readonly userService: UserService) {}
 
   @Get()
   async findOne(@Req() req: Request) {
     const userId = req.user?.sub;
 
+    this.logger.debug('user findOne : ', userId);
     if (!userId) {
       return {
         success: false,
@@ -39,7 +41,7 @@ export class UserController {
   @Get('workspaces')
   async userWorkspaces(@Req() req: Request) {
     const userId = req.user?.sub;
-
+    this.logger.debug('user userWorkspaces : ', userId);
     if (!userId) {
       return {
         success: false,
@@ -59,7 +61,7 @@ export class UserController {
   @Get('lastworkspace')
   async lastWorkspace(@Req() req: Request) {
     const userId = req.user?.sub;
-
+    this.logger.debug('user Get lastWorkspace : ', userId);
     if (!userId) {
       return {
         success: false,
@@ -68,6 +70,8 @@ export class UserController {
       };
     }
     const lastWorkSpace = await this.userService.lastWorkspace(userId);
+
+    this.logger.debug('user Get lastWorkspace Result: ', lastWorkSpace);
     return {
       success: true,
       message: '마지막 워크스페이스 조회 성공',
@@ -85,10 +89,8 @@ export class UserController {
   ) {
     const userId = req.user?.sub;
     const workspaceId = body.workspaceId;
-    if (userId) {
-      return await this.userService.updateLastWorkspaceId(userId, workspaceId);
-    } else {
-      throw new UnauthorizedException('User 정보가 없습니다.');
-    }
+
+    this.logger.debug('user Patch lastWorkspace : ', userId);
+    return await this.userService.updateLastWorkspaceId(userId, workspaceId);
   }
 }
