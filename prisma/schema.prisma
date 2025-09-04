@@ -66,18 +66,19 @@ model RefreshToken {
 }
 
 model Workspace {
-  id          String            @id @default(cuid())
-  name        String
-  slug        String            @unique
-  description String?
-  imageUrl    String?
-  ownerId     String
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  channels    Channel[]
-  invites     WorkspaceInvite[]
-  members     WorkspaceMember[]
-  owner       User              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  id              String            @id @default(cuid())
+  name            String
+  slug            String            @unique
+  description     String?
+  imageUrl        String?
+  ownerId         String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  channels        Channel[]
+  invites         WorkspaceInvite[]
+  members         WorkspaceMember[]
+  dmConversations DMConversation[]
+  owner           User              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@map("workspaces")
 }
@@ -200,16 +201,18 @@ model Reaction {
 }
 
 model DMConversation {
-  id        String          @id @default(cuid())
-  user1Id   String
-  user2Id   String
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
-  user1     User            @relation("DMUser1", fields: [user1Id], references: [id], onDelete: Cascade)
-  user2     User            @relation("DMUser2", fields: [user2Id], references: [id], onDelete: Cascade)
-  messages Message[]
+  id          String          @id @default(cuid())
+  user1Id     String
+  user2Id     String
+  workspaceId String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  user1       User            @relation("DMUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2       User            @relation("DMUser2", fields: [user2Id], references: [id], onDelete: Cascade)
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  messages    Message[]
   
-  @@unique([user1Id, user2Id])
+  @@unique([workspaceId, user1Id, user2Id])
   @@map("dm_conversations")
 }
 
