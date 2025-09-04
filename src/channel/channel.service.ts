@@ -61,11 +61,19 @@ export class ChannelService {
     }));
   }
 
-  async findMany(userId, workspaceSlug, dto: GetChannelsDto) {
+  async findMany(userId: string, workspaceSlug: string, dto: GetChannelsDto) {
     const { search, orderBy = 'createdAt', page = 1, take = 20 } = dto;
-    return await this.prisma.channel.findMany({
+    const workspace = await this.prisma.workspace.findUnique({
       where: {
         slug: workspaceSlug,
+      },
+    });
+    if (!workspace) {
+      throw new NotFoundException('워크스페이스를 찾을 수 없습니다.');
+    }
+    return await this.prisma.channel.findMany({
+      where: {
+        workspaceId: workspace?.id,
         name: search ? { contains: search } : undefined,
         members: {
           some: {

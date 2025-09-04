@@ -9,6 +9,7 @@ import {
   UseGuards,
   Req,
   Query,
+  Logger,
 } from '@nestjs/common';
 import { ChannelService } from './channel.service';
 import { CreateChannelDto } from './dto/create-channel.dto';
@@ -20,6 +21,7 @@ import { GetChannelsDto } from './dto/search-channels.dto';
 @Controller('workspaces/:workspaceSlug/channels')
 @UseGuards(JwtAuthGuard)
 export class ChannelController {
+  private readonly logger = new Logger(ChannelController.name);
   constructor(private readonly channelService: ChannelService) {}
 
   @Get()
