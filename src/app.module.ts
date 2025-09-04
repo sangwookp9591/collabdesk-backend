@@ -16,6 +16,7 @@ import { RedisModule } from './redis/redis.module';
 import { MailModule } from './mail/mail.module';
 import { SocketModule } from './socket/socket.module';
 import { InviteModule } from './invite/invite.module';
+import { DmModule } from './dm/dm.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { InviteModule } from './invite/invite.module';
     MailModule,
     SocketModule,
     InviteModule,
+    DmModule,
   ],
   controllers: [AppController],
   providers: [AppService],
