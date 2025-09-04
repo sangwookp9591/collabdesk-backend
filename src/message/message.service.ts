@@ -28,6 +28,11 @@ export class MessageService {
       include: {
         user: { select: userFields },
         replies: true,
+        channel: {
+          select: {
+            slug: true,
+          },
+        },
       },
     });
   }
@@ -42,6 +47,13 @@ export class MessageService {
         channelId: dto.channelId,
         content: dto.content,
         messageType: dto.messageType,
+      },
+      include: {
+        channel: {
+          select: {
+            slug: true,
+          },
+        },
       },
     });
   }
