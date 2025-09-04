@@ -17,7 +17,7 @@ import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { WorkspaceMemberGuard } from './guards/workspace-member.guard';
 
-@UseGuards(JwtAuthGuard, WorkspaceMemberGuard)
+@UseGuards(JwtAuthGuard)
 @Controller('workspaces')
 export class WorkspaceController {
   constructor(private readonly workspaceService: WorkspaceService) {}
@@ -61,17 +61,20 @@ export class WorkspaceController {
     return this.workspaceService.getUserWorkspaces(userId);
   }
 
+  @UseGuards(WorkspaceMemberGuard)
   @Get(':slug/members')
   async getWorkspaceMembers(@Req() req: Request, @Param('slug') slug: string) {
     return this.workspaceService.getWorkspaceMembers(slug);
   }
 
+  @UseGuards(WorkspaceMemberGuard)
   @Get(':slug/members/me')
   async getMyMembership(@Req() req: Request, @Param('slug') slug: string) {
     const userId = req.user.sub;
     return this.workspaceService.getMyMembership(slug, userId);
   }
 
+  @UseGuards(WorkspaceMemberGuard)
   @Get(':slug/members/:memberId')
   async getWorkspaceMemberById(
     @Req() req: Request,
@@ -81,12 +84,14 @@ export class WorkspaceController {
     return this.workspaceService.getWorkspaceMemberById(slug, memberId);
   }
 
+  @UseGuards(WorkspaceMemberGuard)
   @Get(':slug/stats')
   async getWorkspaceStats(@Req() req: Request, @Param('slug') slug: string) {
     const userId = req.user.sub;
     return await this.workspaceService.getWorkspaceStats(slug, userId);
   }
 
+  @UseGuards(WorkspaceMemberGuard)
   @Get(':slug/init')
   async workspaceInitBySlug(@Req() req: Request, @Param('slug') slug: string) {
     console.log('slug :', slug);
@@ -94,6 +99,7 @@ export class WorkspaceController {
     return await this.workspaceService.workspaceInitBySlug(slug, userId);
   }
 
+  @UseGuards(WorkspaceMemberGuard)
   @Get(':slug')
   async workspaceBySlug(@Req() req: Request, @Param('slug') slug: string) {
     return await this.workspaceService.workspaceBySlug(slug);
