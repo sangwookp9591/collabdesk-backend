@@ -14,7 +14,7 @@ export class WorkspaceService {
   ) {}
 
   async findManyByUserId(userId: string) {
-    return await this.prisma.workspaceMember.findMany({
+    const memberWorkspaces = await this.prisma.workspaceMember.findMany({
       where: {
         userId: userId,
       },
@@ -39,6 +39,8 @@ export class WorkspaceService {
         },
       },
     });
+
+    return memberWorkspaces.map((item) => item.workspace);
   }
 
   async create(

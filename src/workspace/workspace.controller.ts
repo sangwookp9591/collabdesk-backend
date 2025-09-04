@@ -15,8 +15,9 @@ import { JwtAuthGuard } from 'src/jwt-token/guards/jwt-auth.guard';
 import type { Request } from 'express';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { WorkspaceMemberGuard } from './guards/workspace-member.guard';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, WorkspaceMemberGuard)
 @Controller('workspaces')
 export class WorkspaceController {
   constructor(private readonly workspaceService: WorkspaceService) {}
