@@ -28,6 +28,10 @@ model User {
   sentWorkspaceInvites  WorkspaceInvite[] @relation("WorkspaceInvitedBy")
   workspaceMembers      WorkspaceMember[]
   ownedWorkspaces       Workspace[]       @relation("WorkspaceOwner")
+  dmConversations1      DMConversation[]  @relation("DMUser1")
+  dmConversations2      DMConversation[]  @relation("DMUser2")
+  mentions              Mention[]
+  reactions             Reaction[]
 
   @@map("users")
 }
@@ -143,26 +147,72 @@ model ChannelTab {
 }
 
 model Message {
-  id          String      @id @default(cuid())
-  content     String
-  channelId   String
-  userId      String?
-  parentId    String?
-  editedAt    DateTime?
-  isPinned    Boolean     @default(false)
-  // 새로 추가된 필드들
-  messageType MessageType @default(USER) // 메시지 타입
-  systemData  Json? // 시스템 메시지 추가 데이터
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  channel   Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  parent    Message?  @relation("MessageThread", fields: [parentId], references: [id])
-  replies   Message[] @relation("MessageThread")
-  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  id                String          @id @default(cuid())
+  content           String
+  channelId         String
+  dmConversationId  String?
+  userId            String?
+  parentId          String?
+  editedAt          DateTime?
+  isPinned          Boolean         @default(false)
+  messageType       MessageType     @default(USER) // 메시지 타입
+  systemData        Json? // 시스템 메시지 추가 데이터
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  channel           Channel         @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  parent            Message?        @relation("MessageThread", fields: [parentId], references: [id])
+  replies           Message[]       @relation("MessageThread")
+  user              User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dmConversation    DMConversation? @relation(fields: [dmConversationId], references: [id], onDelete: Cascade)
+  mentions          Mention[]
+  reactions         Reaction[]
   @@map("messages")
 }
+
+
+model Mention {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String   // 멘션된 사용자
+  isRead    Boolean  @default(false)
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+  
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([messageId, userId])
+  @@map("mentions")
+}
+
+model Reaction {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String   // 이모지 유니코드 또는 커스텀 이모지 ID
+  createdAt DateTime @default(now())
+  
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([messageId, userId, emoji]) // 같은 사용자가 같은 메시지에 같은 이모지 중복 방지
+  @@map("reactions")
+}
+
+model DMConversation {
+  id        String          @id @default(cuid())
+  user1Id   String
+  user2Id   String
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  user1     User            @relation("DMUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2     User            @relation("DMUser2", fields: [user2Id], references: [id], onDelete: Cascade)
+  messages Message[]
+  
+  @@unique([user1Id, user2Id])
+  @@map("dm_conversations")
+}
+
 
 model WorkspaceInvite {
   id          String        @id @default(cuid())
@@ -201,10 +251,13 @@ model ChannelInvite {
   @@map("channel_invites")
 }
 
+
+
 enum MessageType {
   USER // 일반 사용자 메시지
   SYSTEM // 시스템 메시지 (채널 참가/탈퇴 등)
   BOT // 봇 메시지 (필요시)
+  DM
 }
 
 enum UserStatus {
