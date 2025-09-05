@@ -1,203 +1,653 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import Redis from 'ioredis';
+import { Injectable, Logger } from '@nestjs/common';
+import { RedisConnectionService } from './redis-connection.service';
+import { ConfigService } from '@nestjs/config';
 
 interface UserConnection {
   userId: string;
   socketId: string;
-  currentWorkspace: string | null;
+  workspaceId: string | null;
   joinedChannels: Set<string>;
+  joinedDMConversations: Set<string>;
   lastActiveAt: Date;
+  status: 'ONLINE' | 'AWAY' | 'OFFLINE' | 'DO_NOT_DISTURB';
+}
+
+interface MessageCacheData {
+  messageId: string;
+  content: string;
+  userId: string;
+  channelId?: string;
+  dmConversationId?: string;
+  workspaceId?: string;
+  createdAt: string;
+  messageType: 'USER' | 'SYSTEM' | 'DM';
+  mentions?: string[];
 }
 
 @Injectable()
-export class MessageRedisService implements OnModuleDestroy {
+export class MessageRedisService {
   private readonly logger = new Logger(MessageRedisService.name);
-  private readonly pub: Redis;
-  private readonly sub: Redis;
-
-  private static readonly USER_CONNECTIONS = 'user_connections';
-  private static readonly WORKSPACE_USERS = (id: string) =>
-    `workspace:${id}:users`;
-  private static readonly CHANNEL_USERS = (id: string) => `channel:${id}:users`;
-  private static readonly RECENT_MESSAGES = (id: string) =>
-    `recent_messages:${id}`;
-
   // 이미 구독한 채널을 저장
   private subscribedChannels: Set<string> = new Set();
 
-  constructor() {
-    this.pub = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      password: process.env.REDIS_PASSWORD,
-      maxRetriesPerRequest: 3,
-    });
+  // Redis Key 패턴 상수들
+  private static readonly KEYS = {
+    USER_CONNECTIONS: 'ws:connections',
+    USER_CONNECTION: (userId: string) => `ws:user:${userId}`,
+    WORKSPACE_USERS: (workspaceId: string) =>
+      `ws:workspace:${workspaceId}:users`,
+    CHANNEL_USERS: (channelId: string) => `ws:channel:${channelId}:users`,
+    DM_USERS: (conversationId: string) => `ws:dm:${conversationId}:users`,
 
-    this.sub = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      password: process.env.REDIS_PASSWORD,
-      maxRetriesPerRequest: 3,
-    });
-    this.setupConnectionHandlers();
-  }
+    // 메시지 캐싱
+    RECENT_MESSAGES: (roomId: string) => `messages:recent:${roomId}`,
+    MESSAGE_CACHE: (messageId: string) => `message:${messageId}`,
 
-  private setupConnectionHandlers() {
-    // 메인 Redis 연결 이벤트
-    [this.pub, this.sub].forEach((client, idx) => {
-      client.on('connect', () => {
-        this.logger.log(`${idx === 0 ? 'Publisher' : 'Subscriber'} connected`);
-      });
-      client.on('error', (err) => {
-        this.logger.error(
-          `${idx === 0 ? 'Publisher' : 'Subscriber'} error`,
-          err,
-        );
-      });
-    });
-  }
+    // 읽지 않은 메시지
+    UNREAD_CHANNELS: (userId: string) => `unread:channels:${userId}`,
+    UNREAD_DMS: (userId: string) => `unread:dms:${userId}`,
+    UNREAD_MENTIONS: (userId: string) => `unread:mentions:${userId}`,
 
-  async onModuleDestroy() {
-    await this.pub.quit();
-    await this.sub.quit();
-  }
+    // 사용자 상태
+    USER_STATUS: (userId: string) => `status:${userId}`,
+    USER_LAST_SEEN: (userId: string) => `lastseen:${userId}`,
+
+    // 타이핑 상태
+    TYPING_USERS: (roomId: string) => `typing:${roomId}`,
+
+    // 서버 클러스터 관리
+    SERVER_INSTANCE: (serverId: string) => `server:${serverId}`,
+    ACTIVE_SERVERS: 'servers:active',
+  } as const;
+
+  constructor(
+    private readonly redisConnection: RedisConnectionService,
+    private readonly configService: ConfigService,
+  ) {}
 
   async setUserConnection(
     userId: string,
     connection: UserConnection,
   ): Promise<void> {
-    await this.pub.hset(
-      MessageRedisService.USER_CONNECTIONS,
-      userId,
-      JSON.stringify(connection),
-    );
-    // 24시간 후 자동 삭제
+    try {
+      const connectionData = {
+        ...connection,
+        joinedChannels: Array.from(connection.joinedChannels),
+        joinedDMConversations: Array.from(connection.joinedDMConversations),
+        lastActiveAt: connection.lastActiveAt.toISOString(),
+      };
 
-    await this.setExpire(
-      `${MessageRedisService.USER_CONNECTIONS}:${userId}`,
-      86400,
-    );
+      // 캐시데이터
+      const pipeline = this.redisConnection.cache.pipeline();
+
+      // 사용자별 연결 정보 저장
+      pipeline.setex(
+        MessageRedisService.KEYS.USER_CONNECTION(userId),
+        this.getTTL('user_connection'),
+        JSON.stringify(connectionData),
+      );
+
+      // 전체 연결된 사용자 집합에 추가
+      pipeline.sadd(MessageRedisService.KEYS.USER_CONNECTIONS, userId);
+
+      // 사용자 상태 업데이트
+      pipeline.setex(
+        MessageRedisService.KEYS.USER_STATUS(userId),
+        this.getTTL('user_status'),
+        connection.status,
+      );
+
+      // 마지막 접속 시간 업데이트
+      pipeline.setex(
+        MessageRedisService.KEYS.USER_LAST_SEEN(userId),
+        this.getTTL('last_seen'),
+        Date.now().toString(),
+      );
+
+      await pipeline.exec();
+      this.logger.debug(`User connection set: ${userId}`);
+    } catch (error) {
+      this.logger.error(`Failed to set user connection: ${userId}`, error);
+      throw error;
+    }
   }
 
   async getUserConnection(userId: string): Promise<UserConnection | null> {
-    const data = await this.pub.hget('user_connections', userId);
-    return data ? JSON.parse(data) : null;
+    try {
+      const data = await this.redisConnection.cache.get(
+        MessageRedisService.KEYS.USER_CONNECTION(userId),
+      );
+
+      if (!data) return null;
+
+      const parsed = JSON.parse(data);
+      return {
+        ...parsed,
+        joinedChannels: new Set(parsed.joinedChannels),
+        joinedDMConversations: new Set(parsed.joinedDMConversations),
+        lastActiveAt: new Date(parsed.lastActiveAt),
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get user connection: ${userId}`, error);
+      return null;
+    }
   }
 
   async removeUserConnection(userId: string): Promise<void> {
-    await this.pub.hdel('user_connections', userId);
+    try {
+      const pipeline = this.redisConnection.cache.pipeline();
+
+      // 사용자 연결 정보 삭제, 키 삭제
+      pipeline.del(MessageRedisService.KEYS.USER_CONNECTION(userId));
+
+      // 전체 연결 집합에서 제거 , 원소 제거, 해당 키안에 userId값만 제거
+      pipeline.srem(MessageRedisService.KEYS.USER_CONNECTIONS, userId);
+
+      // 상태를 OFFLINE으로 변경
+      pipeline.setex(
+        MessageRedisService.KEYS.USER_STATUS(userId),
+        this.getTTL('user_status'),
+        'OFFLINE',
+      );
+
+      await pipeline.exec();
+      this.logger.debug(`User connection removed: ${userId}`);
+    } catch (error) {
+      this.logger.error(`Failed to remove user connection: ${userId}`, error);
+      throw error;
+    }
   }
 
-  // 워크스페이스 온라인 사용자 관리 (원자적 연산)
+  //워크스페이스/채널/DM 사용자 관리
+
+  // 유저 워크스페이스에 추가
   async addUserToWorkspace(workspaceId: string, userId: string): Promise<void> {
-    await this.pub.sadd(
-      MessageRedisService.WORKSPACE_USERS(workspaceId),
-      userId,
-    );
-    await this.setExpire(
-      MessageRedisService.WORKSPACE_USERS(workspaceId),
-      86400,
-    );
+    try {
+      const key = MessageRedisService.KEYS.WORKSPACE_USERS(workspaceId);
+      await this.redisConnection.cache.sadd(key, userId);
+      //EXPIRE 는 TTL 설정이라 pipline으로 생성안해도된다.
+      await this.redisConnection.cache.expire(
+        key,
+        this.getTTL('workspace_users'),
+      );
+      this.logger.debug(`User ${userId} added to workspace ${workspaceId}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to add user to workspace: ${workspaceId}:${userId}`,
+        error,
+      );
+      throw error;
+    }
   }
 
   async removeUserFromWorkspace(
     workspaceId: string,
     userId: string,
   ): Promise<void> {
-    await this.pub.srem(
-      MessageRedisService.WORKSPACE_USERS(workspaceId),
-      userId,
-    );
+    try {
+      await this.redisConnection.cache.srem(
+        MessageRedisService.KEYS.WORKSPACE_USERS(workspaceId),
+        userId,
+      );
+      this.logger.debug(`User ${userId} removed from workspace ${workspaceId}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to remove user from workspace: ${workspaceId}:${userId}`,
+        error,
+      );
+      throw error;
+    }
   }
 
   async getWorkspaceUsers(workspaceId: string): Promise<string[]> {
-    return this.pub.smembers(MessageRedisService.WORKSPACE_USERS(workspaceId));
+    try {
+      return await this.redisConnection.cache.smembers(
+        MessageRedisService.KEYS.WORKSPACE_USERS(workspaceId),
+      );
+    } catch (error) {
+      this.logger.error(`Failed to get workspace users: ${workspaceId}`, error);
+      return [];
+    }
   }
 
-  // 채널 온라인 사용자 관리 (원자적 연산)
+  //채널 유저 추가
+
   async addUserToChannel(channelId: string, userId: string): Promise<void> {
-    await this.pub.sadd(MessageRedisService.CHANNEL_USERS(channelId), userId);
-    await this.setExpire(MessageRedisService.CHANNEL_USERS(channelId), 86400);
+    try {
+      const key = MessageRedisService.KEYS.CHANNEL_USERS(channelId);
+      await this.redisConnection.cache.sadd(key, userId);
+      //EXPIRE 는 TTL 설정이라 pipline으로 생성안해도된다.
+      await this.redisConnection.cache.expire(
+        key,
+        this.getTTL('channel_users'),
+      );
+      this.logger.debug(`User ${userId} added to channel ${channelId}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to add user to channelId: ${channelId}:${userId}`,
+        error,
+      );
+      throw error;
+    }
   }
 
   async removeUserFromChannel(
     channelId: string,
     userId: string,
   ): Promise<void> {
-    await this.pub.srem(MessageRedisService.CHANNEL_USERS(channelId), userId);
+    try {
+      await this.redisConnection.cache.srem(
+        MessageRedisService.KEYS.CHANNEL_USERS(channelId),
+        userId,
+      );
+      this.logger.debug(
+        `[SUCCESS][CACHE]  채널에서 유저 삭제 ${channelId}:${userId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `[FAIL][CACHE] 채널에서 유저 삭제 실패: ${channelId}:${userId}`,
+        error,
+      );
+      throw error;
+    }
   }
 
   async getChannelUsers(channelId: string): Promise<string[]> {
-    return this.pub.smembers(MessageRedisService.CHANNEL_USERS(channelId));
-  }
-
-  // 사용자가 참여한 모든 채널에서 제거 (연결 해제 시)
-  async removeUserFromAllChannels(
-    userId: string,
-    channelIds: string[],
-  ): Promise<void> {
-    const pipeline = this.pub.pipeline();
-    channelIds.forEach((id) =>
-      pipeline.srem(MessageRedisService.CHANNEL_USERS(id), userId),
-    );
-    await pipeline.exec();
-  }
-
-  // 실시간 메시지 임시 저장 (WebSocket 재연결용)
-  async cacheRecentMessage<T>(
-    channelId: string,
-    message: T,
-    ttl = 3600,
-  ): Promise<void> {
-    const key = MessageRedisService.RECENT_MESSAGES(channelId);
-    await this.pub.lpush(key, JSON.stringify(message));
-    await this.pub.ltrim(key, 0, 99); // 최근 100개만 보관
-    await this.setExpire(key, ttl);
-  }
-
-  async getRecentMessages<T>(channelId: string, count = 50): Promise<T[]> {
-    const messages = await this.pub.lrange(
-      MessageRedisService.RECENT_MESSAGES(channelId),
-      0,
-      count - 1,
-    );
-    return messages.map((msg) => JSON.parse(msg)).reverse();
-  }
-
-  private async setExpire(key: string, ttl: number) {
-    await this.pub.expire(key, ttl);
-  }
-
-  // -----------------------
-  // Pub/Sub 기능
-  // -----------------------
-  async publish(channelKey: string, message: any) {
-    await this.pub.publish(channelKey, JSON.stringify(message));
-  }
-
-  subscribeChannel(channelKey: string, gatewayCallback: (msg: any) => void) {
-    if (this.subscribedChannels.has(channelKey)) {
-      this.logger.log(
-        `이미 해당 서버에는 구독된 Redis Key입니다. ${channelKey}`,
+    try {
+      return await this.redisConnection.cache.smembers(
+        MessageRedisService.KEYS.CHANNEL_USERS(channelId),
       );
+    } catch (error) {
+      this.logger.error(
+        `[FAIL][CACHE] 채널에서 유저 조회 실패: ${channelId}`,
+        error,
+      );
+      return [];
+    }
+  }
+
+  //디엠 대화방
+
+  async addUserToDM(conversationId: string, userId: string): Promise<void> {
+    try {
+      const key = MessageRedisService.KEYS.DM_USERS(conversationId);
+      await this.redisConnection.cache.sadd(key, userId);
+      //EXPIRE 는 TTL 설정이라 pipline으로 생성안해도된다.
+      await this.redisConnection.cache.expire(key, this.getTTL('dm_users'));
+      this.logger.debug(`User ${userId} added to DM ${conversationId}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to add user to DM: ${conversationId}:${userId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async removeUserFromDM(
+    conversationId: string,
+    userId: string,
+  ): Promise<void> {
+    try {
+      await this.redisConnection.cache.srem(
+        MessageRedisService.KEYS.DM_USERS(conversationId),
+        userId,
+      );
+      this.logger.debug(
+        `[SUCCESS][CACHE] DM에서 유저 삭제 ${conversationId}:${userId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `[FAIL][CACHE] DM에서 유저 삭제 실패: ${conversationId}:${userId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async getDMUsers(conversationId: string): Promise<string[]> {
+    try {
+      return await this.redisConnection.cache.smembers(
+        MessageRedisService.KEYS.DM_USERS(conversationId),
+      );
+    } catch (error) {
+      this.logger.error(
+        `[FAIL][CACHE] DM에서 유저 조회 실패: ${conversationId}`,
+        error,
+      );
+      return [];
+    }
+  }
+
+  //타이핑
+  async setUserTyping(roomId: string, userId: string, userName: string) {
+    try {
+      const key = MessageRedisService.KEYS.TYPING_USERS(roomId);
+      await this.redisConnection.cache.sadd(key, userId);
+      await this.redisConnection.cache.expire(key, this.getTTL('typing_users'));
+    } catch (error) {
+      this.logger.error(
+        `[FAIL][CACHE] 타핑 설정 실패: ${roomId}: ${userName}`,
+        error,
+      );
+    }
+  }
+  async removeUserTyping(roomId: string, userId: string) {
+    try {
+      const key = MessageRedisService.KEYS.TYPING_USERS(roomId);
+      await this.redisConnection.cache.srem(key, userId);
+    } catch (error) {
+      this.logger.error(
+        `[FAIL][CACHE] 타핑 삭제 실패: ${roomId}: ${userId}`,
+        error,
+      );
+    }
+  }
+
+  // 퍼블리셔
+  async publishMessage(channel: string, message: any): Promise<void> {
+    try {
+      const messagePayload = {
+        ...message,
+        timestamp: Date.now(),
+        serverId: this.getServerId(),
+      };
+
+      await this.redisConnection.publisher.publish(
+        channel,
+        JSON.stringify(messagePayload),
+      );
+
+      this.logger.debug(
+        `[SUCCESS][MESSAGE][PUBLISH] 채널에 메시지 발송: ${channel}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `[FAILED][MESSAGE][PUBLISH] 채널에 메시지 발송: ${channel}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  // 구독
+  async subscribeToChannel(
+    channel: string,
+    callback: (message: any) => void,
+  ): Promise<void> {
+    if (this.subscribedChannels.has(channel)) {
+      this.logger.warn(`[WARNING][MESSAGE][SUB] 이미 구독된 채널: ${channel}`);
       return;
     }
 
-    this.subscribedChannels.add(channelKey);
+    try {
+      this.subscribedChannels.add(channel);
 
-    this.sub
-      .subscribe(channelKey)
-      .catch((err) =>
-        this.logger.error(
-          `Redis 구독 [KEY] : ${channelKey} , [ERROR] : ${err}`,
-        ),
+      await this.redisConnection.subscriber.subscribe(channel);
+
+      this.redisConnection.subscriber.on(
+        'message',
+        (receivedChannel, message) => {
+          if (receivedChannel === channel) {
+            try {
+              const parsedMessage = JSON.parse(message);
+              // 자신의 서버에서 발행한 메시지는 무시 (중복 방지)
+              if (parsedMessage.serverId === this.getServerId()) {
+                return;
+              }
+              callback(parsedMessage);
+            } catch (error) {
+              this.logger.error(
+                `FAIL][SUB] 메시지 파싱 실패: ${channel}`,
+                error,
+              );
+            }
+          }
+        },
       );
 
-    this.sub.on('message', (chan, message) => {
-      if (chan === channelKey) {
-        // 같은 채널 key이면 메세지전달
-        gatewayCallback(JSON.parse(message));
+      this.logger.debug(`[SUCCESS][SUB] 채널 구독 성공: ${channel}`);
+    } catch (error) {
+      this.subscribedChannels.delete(channel);
+      this.logger.error(`[FAIL][SUB] 채널 구독 실패: ${channel}`, error);
+      throw error;
+    }
+  }
+
+  async unsubscribeFromChannel(channel: string): Promise<void> {
+    if (!this.subscribedChannels.has(channel)) {
+      return;
+    }
+
+    try {
+      await this.redisConnection.subscriber.unsubscribe(channel);
+      this.subscribedChannels.delete(channel);
+      this.logger.debug(`[SUCCESS][SUB] 채널 구독 해제 성공: ${channel}`);
+    } catch (error) {
+      this.logger.error(`[FAIL][SUB] 채널 구독 해제 실패: ${channel}`, error);
+      throw error;
+    }
+  }
+
+  // ========== 메시지 캐싱 ==========
+
+  async cacheMessage(
+    messageData: MessageCacheData,
+    ttl?: number,
+  ): Promise<void> {
+    try {
+      const cacheKey = MessageRedisService.KEYS.MESSAGE_CACHE(
+        messageData.messageId,
+      );
+      const cacheTTL = ttl || this.getTTL('message_cache');
+
+      await this.redisConnection.cache.setex(
+        cacheKey,
+        cacheTTL,
+        JSON.stringify(messageData),
+      );
+
+      // 최근 메시지 리스트에도 추가
+      const roomId = messageData.channelId || messageData.dmConversationId;
+      if (roomId) {
+        await this.addToRecentMessages(roomId, messageData);
       }
-    });
+
+      this.logger.debug(`Message cached: ${messageData.messageId}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to cache message: ${messageData.messageId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async getCachedMessage(messageId: string): Promise<MessageCacheData | null> {
+    try {
+      const data = await this.redisConnection.cache.get(
+        MessageRedisService.KEYS.MESSAGE_CACHE(messageId),
+      );
+      return data ? JSON.parse(data) : null;
+    } catch (error) {
+      this.logger.error(`Failed to get cached message: ${messageId}`, error);
+      return null;
+    }
+  }
+
+  private async addToRecentMessages(
+    roomId: string,
+    messageData: MessageCacheData,
+  ): Promise<void> {
+    const recentKey = MessageRedisService.KEYS.RECENT_MESSAGES(roomId);
+    const maxRecentMessages = this.configService.get<number>(
+      'REDIS_MAX_RECENT_MESSAGES',
+      100,
+    );
+
+    const pipeline = this.redisConnection.cache.pipeline();
+    pipeline.lpush(recentKey, JSON.stringify(messageData));
+    pipeline.ltrim(recentKey, 0, maxRecentMessages - 1);
+    pipeline.expire(recentKey, this.getTTL('recent_messages'));
+
+    await pipeline.exec();
+  }
+
+  // ========== 읽지 않은 메시지 관리 ==========
+
+  async incrementUnreadCount(
+    userId: string,
+    roomId: string,
+    roomType: 'channel' | 'dm',
+  ): Promise<void> {
+    try {
+      const key =
+        roomType === 'channel'
+          ? MessageRedisService.KEYS.UNREAD_CHANNELS(userId)
+          : MessageRedisService.KEYS.UNREAD_DMS(userId);
+
+      await this.redisConnection.cache.hincrby(key, roomId, 1);
+      await this.redisConnection.cache.expire(key, this.getTTL('unread_count'));
+    } catch (error) {
+      this.logger.error(
+        `Failed to increment unread count: ${userId}:${roomId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async resetUnreadCount(
+    userId: string,
+    roomId: string,
+    roomType: 'channel' | 'dm',
+  ): Promise<void> {
+    try {
+      const key =
+        roomType === 'channel'
+          ? MessageRedisService.KEYS.UNREAD_CHANNELS(userId)
+          : MessageRedisService.KEYS.UNREAD_DMS(userId);
+
+      await this.redisConnection.cache.hdel(key, roomId);
+    } catch (error) {
+      this.logger.error(
+        `Failed to reset unread count: ${userId}:${roomId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async getUnreadCounts(userId: string): Promise<{
+    channels: Record<string, number>;
+    dms: Record<string, number>;
+    mentions: number;
+  }> {
+    try {
+      const [channelCounts, dmCounts, mentionCount] = await Promise.all([
+        this.redisConnection.cache.hgetall(
+          MessageRedisService.KEYS.UNREAD_CHANNELS(userId),
+        ),
+        this.redisConnection.cache.hgetall(
+          MessageRedisService.KEYS.UNREAD_DMS(userId),
+        ),
+        this.redisConnection.cache.get(
+          MessageRedisService.KEYS.UNREAD_MENTIONS(userId),
+        ),
+      ]);
+
+      return {
+        channels: this.parseCountObject(channelCounts),
+        dms: this.parseCountObject(dmCounts),
+        mentions: parseInt(mentionCount || '0', 10),
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get unread counts: ${userId}`, error);
+      return { channels: {}, dms: {}, mentions: 0 };
+    }
+  }
+
+  //유틸리티 메서드
+  private getTTL(type: string): number {
+    const ttlMap = {
+      user_connection: 86400, // 24시간
+      user_status: 86400, // 24시간
+      last_seen: 604800, // 7일
+      workspace_users: 86400, // 24시간
+      channel_users: 86400, // 24시간
+      dm_users: 86400, // 24시간
+      message_cache: 3600, // 1시간
+      typing_users: 20, // 20초
+      recent_messages: 3600, // 1시간
+      unread_count: 604800, // 7일
+    };
+
+    return ttlMap[type] || 3600;
+  }
+
+  private parseCountObject(
+    obj: Record<string, string>,
+  ): Record<string, number> {
+    const result: Record<string, number> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = parseInt(value, 10) || 0;
+    }
+    return result;
+  }
+
+  private getServerId(): string {
+    return this.configService.get<string>('SERVER_ID') || 'default-server';
+  }
+
+  // 헬스 체크
+
+  async healthCheck(): Promise<{
+    status: 'healthy' | 'unhealthy';
+    details: {
+      publisher: boolean;
+      subscriber: boolean;
+      cache: boolean;
+      subscribedChannels: number;
+    };
+  }> {
+    try {
+      const [pubHealth, subHealth, cacheHealth] = await Promise.all([
+        this.redisConnection.publisher
+          .ping()
+          .then(() => true)
+          .catch(() => false),
+        this.redisConnection.subscriber
+          .ping()
+          .then(() => true)
+          .catch(() => false),
+        this.redisConnection.cache
+          .ping()
+          .then(() => true)
+          .catch(() => false),
+      ]);
+
+      const allHealthy = pubHealth && subHealth && cacheHealth;
+
+      return {
+        status: allHealthy ? 'healthy' : 'unhealthy',
+        details: {
+          publisher: pubHealth,
+          subscriber: subHealth,
+          cache: cacheHealth,
+          subscribedChannels: this.subscribedChannels.size,
+        },
+      };
+    } catch (error) {
+      this.logger.error('Health check failed', error);
+      return {
+        status: 'unhealthy',
+        details: {
+          publisher: false,
+          subscriber: false,
+          cache: false,
+          subscribedChannels: 0,
+        },
+      };
+    }
   }
 }
