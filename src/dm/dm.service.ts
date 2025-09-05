@@ -1,10 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { GetMessagesQueryDto } from './dto/get-message-by-dm';
+import { SocketService } from '../socket/socket.service';
 
 @Injectable()
 export class DmService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(DmService.name);
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly socketService: SocketService,
+  ) {}
 
   async getUserDmConversations(userId: string, workspaceSlug: string) {
     const conversations = await this.prisma.dMConversation.findMany({
@@ -215,7 +220,7 @@ export class DmService {
     if (dMConversation) {
       return dMConversation;
     }
-    return await this.prisma.dMConversation.create({
+    const newConversation = await this.prisma.dMConversation.create({
       data: {
         user1Id: userId1,
         user2Id: userId2,
@@ -240,8 +245,23 @@ export class DmService {
             status: true,
           },
         },
+        workspace: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
       },
     });
+    this.logger.debug('CREATE NEW Conversation');
+    await this.socketService.sendToUser(
+      user2Id,
+      'DmRoomCreated',
+      newConversation,
+    );
+
+    return newConversation;
   }
 
   async getDmConversation(conversationId: string) {
