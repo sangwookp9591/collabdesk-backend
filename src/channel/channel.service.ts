@@ -20,7 +20,7 @@ import { SocketService } from 'src/socket/socket.service';
 export class ChannelService {
   constructor(
     private prisma: PrismaService,
-    private SocketService: SocketService,
+    private socketService: SocketService,
   ) {}
 
   async getMyChaneels(userId: string, workspaceSlug: string) {
@@ -153,7 +153,8 @@ export class ChannelService {
         messageType: MessageType.SYSTEM,
       },
     });
-    await this.SocketService.publishChannelCreated(channel);
+
+    await this.notifyChannelCreated(channel);
     return channel;
   }
 
@@ -192,10 +193,13 @@ export class ChannelService {
     if (updateChannelDto.isPublic !== undefined)
       data.isPublic = updateChannelDto.isPublic;
 
-    return this.prisma.channel.update({
+    const updateChannel = await this.prisma.channel.update({
       where: { slug },
       data,
     });
+
+    await this.notifyChannelUpdated(updateChannel);
+    return updateChannel;
   }
 
   async removeBySlug(slug: string, userId: string) {
@@ -244,14 +248,7 @@ export class ChannelService {
         id: channel?.id,
       },
     });
-
-    await this.SocketService.publishChannelDelete({
-      workspaceId: deleteChannel.workspaceId,
-      channelId: deleteChannel.id,
-      userId: userId,
-      message: `${userId}에 의해 ${deleteChannel.name} 채널 삭제`,
-    });
-
+    await this.notifyChannelDeleted(deleteChannel, userId);
     return deleteChannel;
   }
 
@@ -331,6 +328,67 @@ export class ChannelService {
       const slug = nanoid(8); // 8자리 랜덤 ID
       const exists = await prisma.channel.findUnique({ where: { slug } });
       if (!exists) return slug;
+    }
+  }
+
+  private async notifyChannelDeleted(channel: any, deletedBy: string) {
+    await this.socketService.broadcastToRoom(
+      channel.workspaceId,
+      'workspace',
+      'channelDeleted',
+      {
+        channelId: channel.id,
+        channelName: channel.name,
+        deletedBy,
+        deletedAt: new Date().toISOString(),
+      },
+    );
+  }
+
+  private async notifyChannelCreated(channel: any) {
+    if (channel.isPublic) {
+      // 공개 채널은 모든 워크스페이스 멤버에게 알림
+      await this.socketService.broadcastToRoom(
+        channel.workspaceId,
+        'workspace',
+        'channelCreated',
+        {
+          channel,
+          type: 'public',
+        },
+      );
+    } else {
+      // 비공개 채널은 워크스페이스 관리자들에게만 알림
+      await this.socketService.sendToTargets(
+        `workspace:${channel.workspaceId}:admins`,
+        'channelCreated',
+        {
+          channel,
+          visibility: 'private',
+        },
+      );
+    }
+  }
+
+  private async notifyChannelUpdated(channel: any) {
+    await this.socketService.broadcastToRoom(
+      channel.workspaceId,
+      'workspace',
+      'channelUpdated',
+      { channel },
+    );
+  }
+
+  private generateSystemMessageContent(type: string, data: any): string {
+    switch (type) {
+      case 'CHANNEL_CREATED':
+        return `${data.createdBy}님이 #${data.channelName} 채널을 생성했습니다.`;
+      case 'USER_JOINED':
+        return `${data.userName}님이 채널에 참여했습니다.`;
+      case 'USER_LEFT':
+        return `${data.userName}님이 채널을 떠났습니다.`;
+      default:
+        return '시스템 메시지';
     }
   }
 }
