@@ -45,6 +45,21 @@ export class MessageService {
       if (!channel) {
         throw new ForbiddenException('채널이 존재하지 않습니다. 아닙니다.');
       }
+    } else {
+      const conversation = await this.prisma.dMConversation.findUnique({
+        where: {
+          id: dto.dmConversationId,
+        },
+        select: {
+          workspaceId: true,
+        },
+      });
+      workspaceId = conversation?.workspaceId;
+      if (!conversation) {
+        throw new ForbiddenException(
+          'DM 대화방이 존재하지 않습니다. 아닙니다.',
+        );
+      }
     }
 
     // 1. 권한 확인
@@ -432,6 +447,9 @@ export class MessageService {
       where: { id: dmConversationId },
     });
 
+    this.logger.debug('validateDMAccess conversation : ', conversation);
+    this.logger.debug('validateDMAccess workspaceId : ', workspaceId);
+
     if (!conversation) {
       throw new NotFoundException('DM conversation not found');
     }
@@ -483,7 +501,7 @@ export class MessageService {
       const roomType = message.channelId ? 'channel' : 'dm';
 
       // 메시지를 룸의 모든 사용자에게 전송 (발신자 제외)
-      await this.socketService.broadcastToRoom(
+      await this.socketService.messageToRoom(
         roomId,
         roomType,
         'newMessage',
