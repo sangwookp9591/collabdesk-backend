@@ -607,6 +607,54 @@ export class SocketService {
     }
   }
 
+  async messageToRoom(
+    roomId: string,
+    roomType: 'channel' | 'dm' | 'workspace',
+    event: string,
+    data: any,
+    excludeUserId?: string, // 특정 사용자 제외 (메시지 발신자 등)
+  ): Promise<void> {
+    try {
+      const roomKey = this.getRoomKey(roomType, roomId);
+
+      // 현재 서버의 Socket.IO 룸으로 전송
+      let socketBroadcast = this.server.to(roomKey);
+
+      // 특정 사용자 제외
+      if (excludeUserId) {
+        const excludeSocket = this.connectedUsers.get(excludeUserId);
+        if (excludeSocket) {
+          socketBroadcast = socketBroadcast.except(excludeSocket.id);
+        }
+      }
+
+      const payload = {
+        ...data,
+        timestamp: Date.now(),
+        roomId,
+        roomType,
+        serverId: this.getServerId(),
+      };
+
+      socketBroadcast.emit(event, payload);
+
+      // Redis를 통해 다른 서버 인스턴스들에게도 전파
+      await this.messageRedisService.publishMessage(`${roomType}:${roomId}`, {
+        event,
+        data: payload,
+        excludeUserId,
+        serverId: this.getServerId(),
+      });
+
+      this.logger.debug(
+        `message ${event} to ${roomKey} (excludeUser: ${excludeUserId || 'none'})`,
+      );
+    } catch (error) {
+      this.logger.error(`Failed to broadcast to ${roomType} ${roomId}:`, error);
+      throw error;
+    }
+  }
+
   async sendToTargets(key: string, event: string, data: any): Promise<void> {
     try {
       // 현재 서버의 Socket.IO 룸으로 전송
