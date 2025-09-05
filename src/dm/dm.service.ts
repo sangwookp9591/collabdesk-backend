@@ -170,10 +170,10 @@ export class DmService {
     });
   }
 
-  async getDmConversation(dmId: string) {
+  async getDmConversation(conversationId: string) {
     const conversation = await this.prisma.dMConversation.findUnique({
       where: {
-        id: dmId,
+        id: conversationId,
       },
       include: {
         user1: {
@@ -215,7 +215,7 @@ export class DmService {
     return conversation;
   }
 
-  async getDmMessages(dmId: string, dto: GetMessagesQueryDto) {
+  async getDmMessages(conversationId: string, dto: GetMessagesQueryDto) {
     const take = dto?.take ?? 10;
     const page = dto?.page ?? 1;
 
@@ -223,14 +223,14 @@ export class DmService {
 
     const total = await this.prisma.message.count({
       where: {
-        dmConversationId: dmId,
+        dmConversationId: conversationId,
         parentId: null, //상위 메시지만
       },
     });
 
     const messages = await this.prisma.message.findMany({
       where: {
-        dmConversationId: dmId,
+        dmConversationId: conversationId,
         parentId: null,
       },
       include: {
@@ -263,6 +263,37 @@ export class DmService {
     });
     const hasMore = skip + messages.length < total;
     return { messages, hasMore, total };
+  }
+
+  async createDMMessage(
+    userId: string,
+    dto: { dmConversationId: string; content: string; parentId?: string },
+  ) {
+    const userFields = {
+      id: true,
+      email: true,
+      name: true,
+      status: true,
+      profileImageUrl: true,
+    };
+    return await this.prisma.message.create({
+      data: {
+        userId,
+        messageType: 'DM',
+        dmConversationId: dto.dmConversationId,
+        content: dto.content,
+        parentId: dto.parentId,
+      },
+      include: {
+        user: { select: userFields },
+        replies: true,
+        channel: {
+          select: {
+            slug: true,
+          },
+        },
+      },
+    });
   }
 
   private sortUserIds(user1Id: string, user2Id: string) {
