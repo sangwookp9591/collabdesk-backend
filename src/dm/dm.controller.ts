@@ -20,7 +20,7 @@ import { GetMessagesQueryDto } from './dto/get-message-by-dm';
 export class DmController {
   constructor(private readonly dmService: DmService) {}
 
-  @Get()
+  @Get('conversations')
   getUserDmConversations(
     @Req() req: Request,
     @Param('workspaceSlug') workspaceSlug: string,
@@ -29,7 +29,7 @@ export class DmController {
     return this.dmService.getUserDmConversations(userId, workspaceSlug);
   }
 
-  @Post()
+  @Post('conversations')
   createDmConversations(
     @Req() req: Request,
     @Param('workspaceSlug') workspaceSlug: string,
@@ -37,25 +37,28 @@ export class DmController {
     dto: CreateDmDto,
   ) {
     const userId = req.user?.sub;
-    const { targetUserId } = dto;
+    const { otherUserId } = dto;
     return this.dmService.createDmConversations(
       userId,
-      targetUserId,
+      otherUserId,
       workspaceSlug,
     );
   }
 
-  @Get(':dmId')
-  getDmConversation(@Req() req: Request, @Param('dmId') dmId: string) {
-    return this.dmService.getDmConversation(dmId);
+  @Get('conversations/:conversationId')
+  getDmConversation(
+    @Req() req: Request,
+    @Param('conversationId') conversationId: string,
+  ) {
+    return this.dmService.getDmConversation(conversationId);
   }
 
-  @Get(':dmId/messages')
+  @Get('conversations/:conversationId/messages')
   getDmMessages(
     @Req() req: Request,
-    @Param('dmId') dmId: string,
+    @Param('conversationId') conversationId: string,
     @Query() dto: GetMessagesQueryDto,
   ) {
-    return this.dmService.getDmMessages(dmId, dto);
+    return this.dmService.getDmMessages(conversationId, dto);
   }
 }
