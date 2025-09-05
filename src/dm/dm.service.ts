@@ -79,6 +79,80 @@ export class DmService {
     });
   }
 
+  async getUserDmConversationsRecent(userId: string, workspaceSlug: string) {
+    const conversations = await this.prisma.dMConversation.findMany({
+      where: {
+        OR: [
+          {
+            user1Id: userId,
+          },
+          {
+            user2Id: userId,
+          },
+        ],
+        AND: [
+          {
+            workspace: {
+              slug: workspaceSlug,
+            },
+          },
+        ],
+      },
+      include: {
+        user1: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            profileImageUrl: true,
+            status: true,
+          },
+        },
+        user2: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            profileImageUrl: true,
+            status: true,
+          },
+        },
+        messages: {
+          take: 1,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                profileImageUrl: true,
+                status: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 5,
+    });
+
+    return conversations?.map((conversation) => {
+      const otherUser =
+        conversation.user1Id === userId
+          ? conversation.user2
+          : conversation.user1;
+      const lastMessage = conversation.messages[0];
+
+      return {
+        id: conversation.id,
+        otherUser,
+        lastMessage,
+        updatedAt: conversation.updatedAt,
+      };
+    });
+  }
+
   async createDmConversations(
     user1Id: string,
     user2Id: string,
