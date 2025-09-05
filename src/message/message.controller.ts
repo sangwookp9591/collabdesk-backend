@@ -18,12 +18,14 @@ import type { Request } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
+import { WorkspaceMemberGuard } from 'src/workspace/guards/workspace-member.guard';
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class MessageController {
   constructor(private readonly messageService: MessageService) {}
 
-  @Post()
+  @Post('workspaces/:slug/channels/:channelSlug/messages')
+  @UseGuards(WorkspaceMemberGuard)
   @HttpCode(HttpStatus.CREATED)
   @Throttle({ default: { limit: 60, ttl: 60000 } }) // 1분에 60개 메시지 제한
   @ApiOperation({ summary: '메시지 전송' })

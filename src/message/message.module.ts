@@ -7,6 +7,7 @@ import { MessageController } from './message.controller';
 import { SupabaseModule } from 'src/supabase/supabase.module';
 import { MailModule } from 'src/mail/mail.module';
 import { SocketModule } from 'src/socket/socket.module';
+import { WorkspaceModule } from 'src/workspace/workspace.module';
 @Module({
   imports: [
     PrismaModule,
@@ -15,6 +16,7 @@ import { SocketModule } from 'src/socket/socket.module';
     SupabaseModule,
     MailModule,
     SocketModule,
+    WorkspaceModule,
   ],
   controllers: [MessageController],
   providers: [MessageService],
