@@ -150,7 +150,7 @@ model ChannelTab {
 model Message {
   id                String          @id @default(cuid())
   content           String
-  channelId         String
+  channelId         String?
   dmConversationId  String?
   userId            String?
   parentId          String?
@@ -160,7 +160,7 @@ model Message {
   systemData        Json? // 시스템 메시지 추가 데이터
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
-  channel           Channel         @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  channel           Channel?        @relation(fields: [channelId], references: [id], onDelete: Cascade)
   parent            Message?        @relation("MessageThread", fields: [parentId], references: [id])
   replies           Message[]       @relation("MessageThread")
   user              User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
