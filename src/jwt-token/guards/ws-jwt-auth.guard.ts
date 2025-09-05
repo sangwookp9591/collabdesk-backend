@@ -31,7 +31,14 @@ export class WsJwtAuthGuard implements CanActivate {
       const payload = this.jwtService.verify(token, {
         secret: this.configService.get('JWT_ACCESS_SECRET'),
       });
-      client.data.user = payload;
+      client.data.user = {
+        userId: payload.sub,
+        email: payload.email,
+        iat: payload?.iat,
+        exp: payload?.exp,
+      };
+
+      client.data.rooms = new Set();
 
       this.logger.log(`User ${payload.sub} authenticated via WebSocket`);
       return true;
