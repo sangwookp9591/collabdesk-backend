@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { nanoid } from 'nanoid';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
@@ -8,9 +8,10 @@ import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class WorkspaceService {
+  private readonly logger = new Logger(WorkspaceService.name);
   constructor(
-    private prisma: PrismaService,
-    private supabase: SupabaseService,
+    private readonly prisma: PrismaService,
+    private readonly supabase: SupabaseService,
   ) {}
 
   async findManyByUserId(userId: string) {
@@ -147,7 +148,7 @@ export class WorkspaceService {
     }
   }
 
-  async getWorkspaceMembers(slug: string) {
+  async getWorkspaceMembers(slug: string, search?: string) {
     const workspace = await this.prisma.workspace.findUnique({
       where: {
         slug: slug,
@@ -157,20 +158,34 @@ export class WorkspaceService {
     if (!workspace) {
       throw new NotFoundException('워크스페이스를 찾지 못함');
     }
-    return await this.prisma.workspaceMember.findMany({
+    this.logger.debug('[ search ]=', search);
+    const result = await this.prisma.workspaceMember.findMany({
       where: {
         workspaceId: workspace.id,
+        user: search
+          ? {
+              OR: [
+                { name: { contains: search, mode: 'insensitive' } },
+                { email: { contains: search, mode: 'insensitive' } },
+              ],
+            }
+          : undefined,
       },
       include: {
         user: {
           select: {
+            id: true,
             name: true,
             email: true,
             profileImageUrl: true,
+            status: true,
           },
         },
       },
     });
+
+    this.logger.debug('[ search ]=result ', result);
+    return result;
   }
 
   async getMyMembership(slug: string, userId: string) {
@@ -193,6 +208,7 @@ export class WorkspaceService {
       include: {
         user: {
           select: {
+            id: true,
             name: true,
             email: true,
             profileImageUrl: true,
@@ -221,6 +237,7 @@ export class WorkspaceService {
       include: {
         user: {
           select: {
+            id: true,
             name: true,
             email: true,
             profileImageUrl: true,

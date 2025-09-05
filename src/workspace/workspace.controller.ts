@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req,
   UploadedFile,
   UseGuards,
@@ -63,8 +64,12 @@ export class WorkspaceController {
 
   @UseGuards(WorkspaceMemberGuard)
   @Get(':slug/members')
-  async getWorkspaceMembers(@Req() req: Request, @Param('slug') slug: string) {
-    return this.workspaceService.getWorkspaceMembers(slug);
+  async getWorkspaceMembers(
+    @Req() req: Request,
+    @Param('slug') slug: string,
+    @Query('search') search?: string,
+  ) {
+    return this.workspaceService.getWorkspaceMembers(slug, search);
   }
 
   @UseGuards(WorkspaceMemberGuard)
