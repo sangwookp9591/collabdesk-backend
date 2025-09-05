@@ -7,33 +7,18 @@ import {
   ConnectedSocket,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { Server, Socket } from 'socket.io';
+import { Server } from 'socket.io';
 import { Logger, UseGuards } from '@nestjs/common';
 import { WsJwtAuthGuard } from 'src/jwt-token/guards/ws-jwt-auth.guard';
 import { MessageRedisService } from 'src/redis/message-redis.service';
-import { MessageService } from 'src/message/message.service';
-import { Channel } from '@prisma/client';
-import { JwtService } from '@nestjs/jwt';
+import type {
+  AuthenticatedSocket,
+  JoinRoomPayload,
+  TypingPayload,
+} from './interfaces/socket.interface';
+import { SocketService } from 'src/socket/socket.service';
 import { ConfigService } from '@nestjs/config';
 
-interface AuthenticatedSocket extends Socket {
-  data: {
-    user: {
-      sub: string;
-      email: string;
-      iat: number;
-      exp: number;
-    };
-  };
-}
-
-interface UserConnection {
-  userId: string;
-  socketId: string;
-  currentWorkspace: string | null;
-  joinedChannels: Set<string>;
-  lastActiveAt: Date;
-}
 @WebSocketGateway({
   cors: {
     origin: process.env.FRONTEND_URL || 'http://localhost:3000',
@@ -45,213 +30,323 @@ interface UserConnection {
 export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
   private readonly logger = new Logger(SocketGateway.name);
-
+  private readonly subscribedChannels = new Set<string>();
   constructor(
-    private readonly messageService: MessageService,
     private readonly messageRedisService: MessageRedisService,
-    private jwtService: JwtService,
-    private configService: ConfigService,
+    private readonly socketService: SocketService,
+    private readonly configService: ConfigService,
   ) {}
 
-  onModuleInit() {
-    this.setUpRedisSubscriptions();
+  async afterInit(server: Server) {
+    this.socketService.setServer(server);
+    await this.setupRedisSubscriptions();
+    this.logger.log('WebSocket Gateway initialized');
   }
 
-  private setUpRedisSubscriptions() {
-    // 채널 생성 이벤트 구독
-    this.messageRedisService.subscribeChannel(
-      'channel:created:public',
-      (message: Channel) => {
-        this.logger.log('채널 생성 이벤트 ');
-        this.server
-          .to(`workspace:${message.workspaceId}`)
-          .emit('channelCreated', message);
-      },
-    );
-
-    this.messageRedisService.subscribeChannel(
-      'channel:delete',
-      (message: {
-        workspaceId: string;
-        channelId: string;
-        userId: string;
-        message: string;
-      }) => {
-        this.logger.log('채널 삭제 이벤트 ');
-        this.server
-          .to(`workspace:${message.workspaceId}`)
-          .emit('channelDeleted', message);
-      },
-    );
-
-    // 채널 생성 이벤트 구독
-    this.messageRedisService.subscribeChannel(
-      'channel:created:private',
-      (message: Channel) => {
-        this.logger.log('채널 생성 이벤트 ');
-        this.server
-          .to(`workspace:${message.workspaceId}:OWNER`)
-          .emit('channelCreated', message);
-        this.server
-          .to(`workspace:${message.workspaceId}:ADMIN`)
-          .emit('channelCreated', message);
-      },
-    );
-  }
-
-  afterInit() {}
-
-  private subscribeToChannel(channelId: string) {
-    const redisChannel = `channel:${channelId}`;
-    this.messageRedisService.subscribeChannel(redisChannel, (message) => {
-      this.logger.debug('new Message', message.content);
-      this.server.to(redisChannel).emit('newMessage', message);
-    });
-  }
   async handleConnection(client: AuthenticatedSocket) {
-    const auth = this.authenticateClient(client);
-    if (!auth) {
-      client.disconnect();
-      return;
-    }
-
-    const userConnection: UserConnection = {
-      userId: auth.userId,
-      socketId: client.id,
-      currentWorkspace: null,
-      joinedChannels: new Set(),
-      lastActiveAt: new Date(),
-    };
-
-    await this.messageRedisService.setUserConnection(
-      auth.userId,
-      userConnection,
-    );
-    client.emit('connected', {
-      message: 'socket 연결 성공',
-      userId: auth.userId,
-      socketId: client.id,
-    });
+    await this.socketService.handleConnection(client);
   }
 
   async handleDisconnect(client: AuthenticatedSocket) {
-    const auth = this.authenticateClient(client);
-    if (!auth) return;
-    const connection = await this.messageRedisService.getUserConnection(
-      auth.userId,
-    );
-    if (connection) {
-      // 채널/워크스페이스에서 제거
-      await this.messageRedisService.removeUserFromAllChannels(
-        auth.userId,
-        Array.from(connection.joinedChannels),
-      );
-      if (connection.currentWorkspace) {
-        await this.messageRedisService.removeUserFromWorkspace(
-          connection.currentWorkspace,
-          auth.userId,
-        );
-      }
-    }
-
-    await this.messageRedisService.removeUserConnection(auth.userId);
+    await this.socketService.handleDisconnection(client);
   }
+
+  // ========== 룸 관리 이벤트 ==========
 
   @SubscribeMessage('joinWorkspace')
   async handleJoinWorkspace(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() payload: { workspaceId: string },
   ) {
-    const userId = client.data.user.sub;
-    const member = await this.messageService.getWorkspaceMember(
-      payload.workspaceId,
-      userId,
-    );
+    await this.socketService.joinWorkspace(client, payload.workspaceId);
+  }
 
-    if (!member) {
-      client.emit('error', { message: 'Access denied to workspace' });
+  @SubscribeMessage('joinRoom')
+  async handleJoinRoom(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload: JoinRoomPayload,
+  ) {
+    const { roomId, roomType } = payload;
+
+    if (roomType === 'channel' || roomType === 'dm') {
+      await this.socketService.joinRoom(client, roomId, roomType);
+
+      // Redis 채널 구독 (첫 사용자인 경우)
+      const redisChannel = `${roomType}:${roomId}`;
+      if (!this.subscribedChannels.has(redisChannel)) {
+        await this.subscribeToRedisChannel(redisChannel);
+      }
+    }
+  }
+
+  @SubscribeMessage('leaveRoom')
+  async handleLeaveRoom(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload: JoinRoomPayload,
+  ) {
+    const { roomId, roomType } = payload;
+
+    if (roomType === 'channel' || roomType === 'dm') {
+      await this.socketService.leaveRoom(client, roomId, roomType);
+    }
+  }
+
+  // ========== 타이핑 상태 이벤트 ==========
+
+  @SubscribeMessage('typing')
+  async handleTyping(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload: TypingPayload,
+  ) {
+    try {
+      const userId = client.data.user.userId;
+
+      await this.socketService.setUserTyping(
+        payload.roomId,
+        payload.roomType,
+        userId,
+        payload.isTyping,
+        payload.userName,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle typing for user ${client.data.user.userId}:`,
+        error,
+      );
+    }
+  }
+
+  // ========== 사용자 상태 이벤트 ==========
+
+  @SubscribeMessage('updateStatus')
+  async handleUpdateStatus(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody()
+    payload: { status: 'ONLINE' | 'AWAY' | 'OFFLINE' | 'DO_NOT_DISTURB' },
+  ) {
+    try {
+      const userId = client.data.user.userId;
+      await this.socketService.updateUserStatus(userId, payload.status);
+    } catch (error) {
+      this.logger.error(
+        `Failed to update status for user ${client.data.user.userId}:`,
+        error,
+      );
+    }
+  }
+
+  @SubscribeMessage('markAsRead')
+  async handleMarkAsRead(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody()
+    payload: {
+      roomId: string;
+      roomType: 'channel' | 'dm';
+      lastReadMessageId?: string;
+    },
+  ) {
+    try {
+      const userId = client.data.user.userId;
+
+      // Redis에서 읽지 않은 카운터 초기화
+      await this.messageRedisService.resetUnreadCount(
+        userId,
+        payload.roomId,
+        payload.roomType,
+      );
+
+      // 읽음 상태를 다른 기기들에게도 동기화
+      await this.socketService.sendToUser(userId, 'readStatusSync', {
+        roomId: payload.roomId,
+        roomType: payload.roomType,
+        lastReadMessageId: payload.lastReadMessageId,
+        readAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to mark as read for user ${client.data.user.userId}:`,
+        error,
+      );
+    }
+  }
+
+  // ========== Redis 구독 관리 ==========
+
+  private async setupRedisSubscriptions() {
+    try {
+      // 글로벌 브로드캐스트 이벤트들 구독
+      const subscriptions = [
+        'global:notifications',
+        'system:broadcasts',
+        'server:heartbeat',
+      ];
+
+      for (const channel of subscriptions) {
+        await this.messageRedisService.subscribeToChannel(
+          channel,
+          (message) => {
+            this.handleRedisMessage(channel, message);
+          },
+        );
+      }
+
+      // 동적 채널 구독 (룸별 브로드캐스트)
+      await this.messageRedisService.subscribeToChannel(
+        'broadcast:*',
+        (message) => {
+          this.handleBroadcastMessage(message);
+        },
+      );
+
+      this.logger.log('Redis subscriptions setup completed');
+    } catch (error) {
+      this.logger.error('Failed to setup Redis subscriptions:', error);
+    }
+  }
+
+  private handleRedisMessage(channel: string, message: any) {
+    try {
+      switch (channel) {
+        case 'global:notifications':
+          this.server.emit('globalNotification', message);
+          break;
+
+        case 'system:broadcasts':
+          this.server.emit('systemBroadcast', message);
+          break;
+
+        case 'server:heartbeat':
+          this.handleServerHeartbeat(message);
+          break;
+
+        default:
+          this.logger.debug(`Received Redis message from ${channel}:`, message);
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle Redis message from ${channel}:`,
+        error,
+      );
+    }
+  }
+  private async subscribeToRedisChannel(channel: string) {
+    if (this.subscribedChannels.has(channel)) {
       return;
     }
 
-    await this.messageRedisService.addUserToWorkspace(
-      payload.workspaceId,
-      userId,
-    );
-    const channels = await this.messageService.getUserChannels(
-      payload.workspaceId,
-      userId,
-    );
+    this.subscribedChannels.add(channel);
 
-    for (const channel of channels) {
-      await this.messageRedisService.addUserToChannel(channel.id, userId);
-      client.join(`channel:${channel.id}`);
-      // 새로 접속한 서버가 아직 구독하지 않은 채널이면 구독
-      this.subscribeToChannel(channel.id);
+    await this.messageRedisService.subscribeToChannel(channel, (message) => {
+      this.handleRedisMessage(channel, message);
+    });
+
+    this.logger.debug(`Subscribed to Redis channel: ${channel}`);
+  }
+
+  private handleBroadcastMessage(message: any) {
+    try {
+      const { event, data, excludeUserId, serverId } = message;
+
+      // 같은 서버에서 발행한 메시지는 무시 (중복 방지)
+      if (serverId === this.getServerId()) {
+        return;
+      }
+
+      // 브로드캐스트 타입에 따라 처리
+      if (message.roomId && message.roomType) {
+        const roomKey = `${message.roomType}:${message.roomId}`;
+        let broadcast = this.server.to(roomKey);
+
+        // 특정 사용자 제외
+        if (excludeUserId) {
+          const excludeSocket =
+            this.socketService.getSocketByUserId(excludeUserId);
+          if (excludeSocket) {
+            broadcast = broadcast.except(excludeSocket.id);
+          }
+        }
+
+        broadcast.emit(event, data);
+      } else if (message.userIds) {
+        // 다중 사용자 전송
+        for (const userId of message.userIds) {
+          this.server.to(`user:${userId}`).emit(event, data);
+        }
+      }
+    } catch (error) {
+      this.logger.error('Failed to handle broadcast message:', error);
     }
+  }
 
-    client.join(`workspace:${payload.workspaceId}`);
-    client.join(`workspace:${payload.workspaceId}:${member.role}`);
-    client.to(`workspace:${payload.workspaceId}`).emit('userJoinedWorkspace', {
-      userId,
-      workspaceId: payload.workspaceId,
+  // ========== 서버 관리 ==========
+  // private setupServerHeartbeat() {
+  //   const serverId = this.getServerId();
+
+  //   setInterval(() => {
+  //     (async () => {
+  //       try {
+  //         const stats = this.socketService.getServerStats();
+  //         await this.messageRedisService.publishMessage('server:heartbeat', {
+  //           serverId,
+  //           stats,
+  //           timestamp: Date.now(),
+  //         });
+  //       } catch (error) {
+  //         this.logger.error('Failed to send server heartbeat:', error);
+  //       }
+  //     })();
+  //   }, 5000);
+  // }
+
+  private handleServerHeartbeat(message: any) {
+    if (message.serverId !== this.getServerId()) {
+      // 다른 서버의 heartbeat 로그
+      this.logger.debug(
+        `Server ${message.serverId} heartbeat: ${JSON.stringify(message.stats)}`,
+      );
+    }
+  }
+
+  private getServerId(): string {
+    return (
+      this.configService.get<string>('SERVER_ID') || `server-${process.pid}`
+    );
+  }
+
+  // ========== 외부 API 메서드들 ==========
+
+  async notifyUser(userId: string, notification: any) {
+    await this.socketService.sendToUser(userId, 'notification', notification);
+  }
+
+  async broadcastToWorkspace(workspaceId: string, event: string, data: any) {
+    await this.socketService.broadcastToRoom(
+      workspaceId,
+      'workspace',
+      event,
+      data,
+    );
+  }
+
+  async broadcastToChannel(channelId: string, event: string, data: any) {
+    await this.socketService.broadcastToRoom(channelId, 'channel', event, data);
+  }
+
+  async notifyMention(userId: string, mentionData: any) {
+    await this.socketService.sendToUser(userId, 'mention', mentionData);
+  }
+
+  // ========== 에러 핸들링 ==========
+
+  handleError(client: AuthenticatedSocket, error: any) {
+    this.logger.error(`Socket error for client ${client.id}:`, error);
+    client.emit('error', {
+      message: 'Internal server error',
+      timestamp: Date.now(),
     });
   }
 
-  @SubscribeMessage('joinChannel')
-  async handleJoinChannel(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() payload: { workspaceId: string; channelId: string },
-  ) {
-    const userId = client.data.user.sub;
-    const isMember = await this.messageService.isWorkspaceMember(
-      payload.workspaceId,
-      userId,
-    );
-
-    if (!isMember) {
-      client.emit('error', { message: 'Access denied to workspace' });
-      return;
-    }
-
-    await this.messageRedisService.addUserToChannel(payload.channelId, userId);
-  }
-
-  @SubscribeMessage('sendMessage')
-  async sendMessage(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody()
-    dto: { channelId: string; content: string; parentId?: string },
-  ) {
-    const userId = client.data.user.sub;
-    const newMessage = await this.messageService.createUserMessage(userId, dto);
-    await this.messageRedisService.publish(
-      `channel:${dto.channelId}`,
-      newMessage,
-    );
-  }
-
-  // 외부 호출 이벤트
-  async publishChannelCreated(channel: Channel) {
-    const ev = channel?.isPublic
-      ? 'channel:created:public'
-      : 'channel:created:private';
-    await this.messageRedisService.publish(ev, channel);
-  }
-
-  private authenticateClient(
-    client: Socket,
-  ): { userId: string; email: string } | null {
-    const token = client.handshake.auth?.token;
-    if (!token) return null;
-
-    try {
-      const payload = this.jwtService.verify(token, {
-        secret: this.configService.get('JWT_ACCESS_SECRET'),
-      });
-      return { userId: payload.sub, email: payload.email };
-    } catch (err) {
-      console.log('err : ', err);
-      return null;
-    }
+  handleDisconnectError(error: any) {
+    this.logger.error('Socket disconnection error:', error);
   }
 }
