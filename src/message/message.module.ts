@@ -5,16 +5,16 @@ import { JwtTokenModule } from 'src/jwt-token/jwt-token.module';
 import { UserModule } from 'src/user/user.module';
 import { MessageController } from './message.controller';
 import { SupabaseModule } from 'src/supabase/supabase.module';
-import { RedisModule } from 'src/redis/redis.module';
 import { MailModule } from 'src/mail/mail.module';
+import { SocketModule } from 'src/socket/socket.module';
 @Module({
   imports: [
     PrismaModule,
     UserModule,
     JwtTokenModule,
     SupabaseModule,
-    RedisModule,
     MailModule,
+    SocketModule,
   ],
   controllers: [MessageController],
   providers: [MessageService],
