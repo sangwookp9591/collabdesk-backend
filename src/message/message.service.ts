@@ -169,7 +169,7 @@ export class MessageService {
         this.socketService.updateUnreadCounts(result, userId),
 
         // 실시간 알림 전송
-        this.broadcastMessage(result, userId),
+        this.broadcastMessage(result, userId, workspaceId),
       ]);
 
       return result;
@@ -357,6 +357,7 @@ export class MessageService {
       take,
       skip,
     });
+    this.logger.debug('새로운 메세지 조회, ', messages);
 
     const hasMore = skip + messages.length < total;
     return { messages, hasMore, total };
@@ -495,7 +496,11 @@ export class MessageService {
     }
   }
 
-  private async broadcastMessage(message: any, senderId: string) {
+  private async broadcastMessage(
+    message: any,
+    senderId: string,
+    workspaceId: string,
+  ) {
     try {
       const roomId = message.channelId || message.dmConversationId;
       const roomType = message.channelId ? 'channel' : 'dm';
@@ -515,7 +520,7 @@ export class MessageService {
       // 워크스페이스 레벨 알림 (새 활동 표시용)
       if (message.channelId) {
         await this.socketService.broadcastToRoom(
-          message.workspaceId,
+          workspaceId,
           'workspace',
           'channelActivity',
           {
