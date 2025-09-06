@@ -53,13 +53,24 @@ export class SocketGateway
   }
 
   async handleConnection(client: AuthenticatedSocket) {
-    const tokenParedClient = this.initTokenParse(client);
-    await this.socketService.handleConnection(tokenParedClient);
+    try {
+      const tokenParedClient = this.initTokenParse(client);
+      await this.socketService.handleConnection(tokenParedClient);
+    } catch (error) {
+      client.emit('error', { message: `토큰 만료 ${error.message}` });
+      client.disconnect(true);
+    }
   }
 
   async handleDisconnect(client: AuthenticatedSocket) {
-    const tokenParedClient = this.initTokenParse(client);
-    await this.socketService.handleDisconnection(tokenParedClient);
+    try {
+      const tokenParedClient = this.initTokenParse(client);
+
+      await this.socketService.handleDisconnection(tokenParedClient);
+    } catch (error) {
+      client.emit('error', { message: `토큰 만료 ${error.message}` });
+      client.disconnect(true);
+    }
   }
 
   // ========== 룸 관리 이벤트 ==========
@@ -320,7 +331,6 @@ export class SocketGateway
 
   private initTokenParse(client: Socket) {
     const token = client.handshake.auth?.token;
-    console.log('token : ', token);
 
     if (!token) {
       throw new WsException('No token provided');
@@ -329,6 +339,7 @@ export class SocketGateway
     const payload = this.jwtService.verify(token, {
       secret: this.configService.get('JWT_ACCESS_SECRET'),
     });
+
     client.data.user = {
       userId: payload.sub,
       email: payload.email,
