@@ -6,9 +6,10 @@ import {
   MessageBody,
   ConnectedSocket,
   WebSocketServer,
+  WsException,
 } from '@nestjs/websockets';
-import { Server } from 'socket.io';
-import { Logger, UseGuards } from '@nestjs/common';
+import { Server, Socket } from 'socket.io';
+import { Logger, OnApplicationBootstrap, UseGuards } from '@nestjs/common';
 import { WsJwtAuthGuard } from 'src/jwt-token/guards/ws-jwt-auth.guard';
 import { MessageRedisService } from 'src/redis/message-redis.service';
 import type {
@@ -18,6 +19,7 @@ import type {
 } from './interfaces/socket.interface';
 import { SocketService } from 'src/socket/socket.service';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 
 @WebSocketGateway({
   cors: {
@@ -27,7 +29,9 @@ import { ConfigService } from '@nestjs/config';
   namespace: '/wsg',
 })
 @UseGuards(WsJwtAuthGuard)
-export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class SocketGateway
+  implements OnGatewayConnection, OnGatewayDisconnect, OnApplicationBootstrap
+{
   @WebSocketServer() server: Server;
   private readonly logger = new Logger(SocketGateway.name);
   private readonly subscribedChannels = new Set<string>();
@@ -35,20 +39,27 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly messageRedisService: MessageRedisService,
     private readonly socketService: SocketService,
     private readonly configService: ConfigService,
+    private readonly jwtService: JwtService,
   ) {}
 
-  async afterInit(server: Server) {
-    this.socketService.setServer(server);
+  async onApplicationBootstrap() {
+    // 모든 모듈 초기화 후 실행
     await this.setupRedisSubscriptions();
     this.logger.log('WebSocket Gateway initialized');
   }
 
+  afterInit(server: Server) {
+    this.socketService.setServer(server);
+  }
+
   async handleConnection(client: AuthenticatedSocket) {
-    await this.socketService.handleConnection(client);
+    const tokenParedClient = this.initTokenParse(client);
+    await this.socketService.handleConnection(tokenParedClient);
   }
 
   async handleDisconnect(client: AuthenticatedSocket) {
-    await this.socketService.handleDisconnection(client);
+    const tokenParedClient = this.initTokenParse(client);
+    await this.socketService.handleDisconnection(tokenParedClient);
   }
 
   // ========== 룸 관리 이벤트 ==========
@@ -69,13 +80,13 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const { roomId, roomType } = payload;
 
     if (roomType === 'channel' || roomType === 'dm') {
-      await this.socketService.joinRoom(client, roomId, roomType);
-
       // Redis 채널 구독 (첫 사용자인 경우)
       const redisChannel = `${roomType}:${roomId}`;
       if (!this.subscribedChannels.has(redisChannel)) {
         await this.subscribeToRedisChannel(redisChannel);
       }
+
+      await this.socketService.joinRoom(client, roomId, roomType);
     }
   }
 
@@ -305,6 +316,27 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
         `Server ${message.serverId} heartbeat: ${JSON.stringify(message.stats)}`,
       );
     }
+  }
+
+  private initTokenParse(client: Socket) {
+    const token = client.handshake.auth?.token;
+    console.log('token : ', token);
+
+    if (!token) {
+      throw new WsException('No token provided');
+    }
+
+    const payload = this.jwtService.verify(token, {
+      secret: this.configService.get('JWT_ACCESS_SECRET'),
+    });
+    client.data.user = {
+      userId: payload.sub,
+      email: payload.email,
+      iat: payload?.iat,
+      exp: payload?.exp,
+    };
+
+    return client;
   }
 
   private getServerId(): string {
