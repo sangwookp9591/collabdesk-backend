@@ -257,7 +257,7 @@ export class DmService {
     this.logger.debug('CREATE NEW Conversation');
     await this.socketService.sendToUser(
       user2Id,
-      'DmRoomCreated',
+      'dmRoomCreated',
       newConversation,
     );
 
@@ -314,7 +314,7 @@ export class DmService {
     const page = dto?.page ?? 1;
 
     const skip = (page - 1) * take;
-
+    this.logger.debug('DM 메세지 조회 page take : ', take);
     const total = await this.prisma.message.count({
       where: {
         dmConversationId: conversationId,
@@ -355,6 +355,8 @@ export class DmService {
       take,
       skip,
     });
+
+    this.logger.debug('DM 메세지 조회 : ', messages);
     const hasMore = skip + messages.length < total;
     return { messages, hasMore, total };
   }
