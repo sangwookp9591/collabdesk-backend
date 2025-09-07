@@ -311,9 +311,9 @@ export class DmService {
 
   async getDmMessages(conversationId: string, dto: GetMessagesQueryDto) {
     const take = dto?.take ?? 10;
-    const page = dto?.page ?? 1;
+    const cursor = dto?.cursor;
+    const direction = dto.direction ?? 'prev';
 
-    const skip = (page - 1) * take;
     this.logger.debug('DM 메세지 조회 page take : ', take);
     const total = await this.prisma.message.count({
       where: {
@@ -322,6 +322,14 @@ export class DmService {
       },
     });
 
+    const userFields = {
+      id: true,
+      email: true,
+      name: true,
+      status: true,
+      profileImageUrl: true,
+    };
+
     const messages = await this.prisma.message.findMany({
       where: {
         dmConversationId: conversationId,
@@ -329,36 +337,41 @@ export class DmService {
       },
       include: {
         user: {
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            profileImageUrl: true,
-          },
+          select: userFields,
         },
         replies: {
           // 스레드 포함
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                name: true,
-                profileImageUrl: true,
-              },
-            },
-          },
-          orderBy: { createdAt: 'asc' },
+          include: { user: { select: userFields } },
+          orderBy: { createdAt: 'desc' },
         },
       },
-      orderBy: { createdAt: 'asc' }, // 최신순 혹은 오름차순
+      orderBy: { createdAt: 'desc' },
       take,
-      skip,
+      cursor: cursor ? { id: cursor } : undefined,
+      skip: cursor ? 1 : 0,
     });
 
     this.logger.debug('DM 메세지 조회 : ', messages);
-    const hasMore = skip + messages.length < total;
-    return { messages, hasMore, total };
+    let prevCursor: string | null = null;
+    let nextCursor: string | null = null;
+    const hasMore = messages.length === take;
+    if (hasMore && messages.length > 0) {
+      if (direction === 'prev') {
+        prevCursor = messages[messages.length - 1].id; // 더 오래된 메시지용
+      } else {
+        nextCursor = messages[0].id; // 더 최신 메시지용
+      }
+    }
+
+    const orderedMessages = messages?.reverse();
+    return {
+      messages: orderedMessages,
+      total,
+      hasMore,
+      prevCursor,
+      nextCursor,
+      direction,
+    };
   }
 
   async createDMMessage(
