@@ -1,4 +1,3 @@
-// auth.controller.ts
 import {
   Controller,
   Post,
@@ -71,24 +70,17 @@ export class AuthController {
     @Body(ValidationPipe) loginDto: LoginDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const user = await this.authService.login(loginDto);
+    const auth = await this.authService.login(loginDto);
     // 쿠키에 Refresh Token 심기
-    if (user.refreshToken) {
-      res.cookie('refreshToken', user.refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        path: '/',
-        maxAge: user.expiresIn! * 1000, // expiresIn 초 단위
-      });
-    }
 
-    delete user.refreshToken;
+    if (auth.refreshToken) {
+      this.setAuthCookie(res, auth.refreshToken, auth.expiresIn!);
+    }
 
     return {
       success: true,
       message: '로그인에 성공했습니다.',
-      data: user,
+      data: auth,
     };
   }
 
@@ -96,48 +88,63 @@ export class AuthController {
   async refreshTokens(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
+    @Body()
+    dto: {
+      refreshToken: string;
+    },
   ) {
-    const refreshToken = req.cookies['refreshToken'];
+    // console.log('req.signedCookies : ', req.signedCookies);
+    // console.log('req.cookies : ', req.cookies);
 
-    console.log('refreshToken : ', refreshToken);
+    // const refreshToken = req.cookies['refreshToken'];
+    const refreshToken = dto.refreshToken;
+
     if (!refreshToken) {
       throw new UnauthorizedException('Refresh token required');
     }
-    const response = await this.authService.refreshTokens(
-      refreshToken as string,
-    );
+    const response = await this.authService.refreshTokens(refreshToken);
 
-    if (!response?.refreshToken) {
-      return {
-        success: false,
-        message: 'refresh token 갱신 실팬',
-        data: null,
-      };
+    if (!response) {
+      throw new UnauthorizedException('GenreateToken error');
     }
-
-    res.cookie('refreshToken', response.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      path: '/',
-      maxAge: response.expiresIn * 1000, // expiresIn 초 단위
-    });
+    this.setAuthCookie(res, response.refreshToken, response.expiresIn);
 
     return {
-      success: true,
-      message: '토큰갱신에 성공했습니다.',
-      data: { accessToken: response.accessToken },
+      accessToken: response.accessToken,
+      refreshToken: response.refreshToken,
+      expiresIn: response.expiresIn,
     };
   }
 
   @Post('logout')
-  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const refreshToken = req.cookies['refreshToken'];
-    console.log('refreshToken : ', refreshToken);
-    if (refreshToken) {
-      await this.authService.logout(refreshToken as string);
+  async logout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+    @Body()
+    dto: {
+      refreshToken: string;
+    },
+  ) {
+    // const refreshToken = req.cookies['refreshToken'];
+    console.log('refreshToken : ', dto.refreshToken);
+    if (dto.refreshToken) {
+      await this.authService.logout(dto.refreshToken);
       res.clearCookie('refreshToken', { path: '/' });
     }
     return { message: 'Logged out successfully' };
+  }
+
+  private setAuthCookie(
+    res: Response,
+    refreshToken: string,
+    expiresIn: number,
+  ) {
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      path: '/',
+      maxAge: expiresIn * 1000,
+    });
   }
 }
