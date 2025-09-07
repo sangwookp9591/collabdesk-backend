@@ -77,11 +77,7 @@ export class AuthController {
       this.setAuthCookie(res, auth.refreshToken, auth.expiresIn!);
     }
 
-    return {
-      success: true,
-      message: '로그인에 성공했습니다.',
-      data: auth,
-    };
+    return auth;
   }
 
   @Post('refresh')
