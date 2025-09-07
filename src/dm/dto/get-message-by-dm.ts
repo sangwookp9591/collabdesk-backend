@@ -1,12 +1,13 @@
-import { IsOptional, IsInt, Min } from 'class-validator';
+import { IsOptional, IsInt, Min, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class GetMessagesQueryDto {
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
+  cursor?: string;
+
+  @IsOptional()
+  @IsIn(['prev', 'next'])
+  direction?: 'prev' | 'next' = 'next';
 
   @IsOptional()
   @Type(() => Number)
