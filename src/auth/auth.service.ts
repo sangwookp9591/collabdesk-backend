@@ -180,7 +180,16 @@ export class AuthService {
     }
   }
 
-  async logout(refreshToken: string) {
-    await this.jwtTokenService.revokeRefreshToken(refreshToken);
+  async logout(dto: { email: string; refreshToken: string }) {
+    await this.prisma.user.update({
+      where: {
+        email: dto.email,
+      },
+      data: {
+        status: 'OFFLINE',
+        lastActiveAt: new Date(),
+      },
+    });
+    await this.jwtTokenService.revokeRefreshToken(dto.refreshToken);
   }
 }

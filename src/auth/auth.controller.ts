@@ -118,13 +118,13 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
     @Body()
     dto: {
+      email: string;
       refreshToken: string;
     },
   ) {
     // const refreshToken = req.cookies['refreshToken'];
-    console.log('refreshToken : ', dto.refreshToken);
-    if (dto.refreshToken) {
-      await this.authService.logout(dto.refreshToken);
+    if (dto.refreshToken && dto.email) {
+      await this.authService.logout(dto);
       res.clearCookie('refreshToken', { path: '/' });
     }
     return { message: 'Logged out successfully' };
