@@ -65,13 +65,12 @@ export class SocketService {
       const connection =
         await this.messageRedisService.getUserConnection(userId);
       if (connection) {
+        // 상태 변경을 다른 사용자들에게 알림
+        await this.broadcastUserStatusChange(userId, 'OFFLINE');
         // 모든 룸에서 제거
         await this.leaveAllRooms(userId, connection);
 
         await this.handleUserDisconnectTyping(userId, connection);
-
-        // 상태 변경을 다른 사용자들에게 알림
-        await this.broadcastUserStatusChange(userId, 'OFFLINE');
       }
 
       await this.messageRedisService.removeUserConnection(userId);
@@ -165,13 +164,29 @@ export class SocketService {
         await this.messageRedisService.setUserConnection(userId, connection);
       }
 
+      //워크스페이스 이용자 정보 업데이트
+      await this.messageRedisService.setWorkspaceUserStatus(
+        userId,
+        'ONLINE',
+        workspaceId,
+        '',
+      );
+
       // 상태 변경을 다른 사용자들에게 알림
       await this.broadcastUserStatusChange(userId, 'ONLINE');
 
+      //워크스페이스 맴버 상태정보 조회
+      const userStatuses =
+        await this.messageRedisService.getMultipleWorkspaceUserStatus(
+          workspaceId,
+        );
+
+      this.logger.debug(`JoIn room userStatuses :`, userStatuses);
       socket.emit('workspaceJoined', {
         workspaceId: workspaceId,
         joinedChannels: userChannels.map((c) => c.id),
         joinedDMConversations: dmConversations.map((dm) => dm.id),
+        userStatuses: userStatuses,
       });
       this.logger.debug(`User ${userId} joined workspace ${workspaceId}`);
     } catch (error) {
@@ -607,6 +622,16 @@ export class SocketService {
         connection.status = status;
         connection.lastActiveAt = new Date();
         await this.messageRedisService.setUserConnection(userId, connection);
+
+        //워크스페이스 상태 업데이트
+        if (connection?.workspaceId) {
+          await this.messageRedisService.setWorkspaceUserStatus(
+            userId,
+            status,
+            connection?.workspaceId,
+            '',
+          );
+        }
       }
 
       // 상태 변경을 다른 사용자들에게 알림
@@ -625,6 +650,7 @@ export class SocketService {
     // 사용자가 참여 중인 워크스페이스들에 상태 변경 알림
     const connection = await this.messageRedisService.getUserConnection(userId);
     if (connection && connection.workspaceId) {
+      this.logger.debug(`Updated user status: ${userId} -> ${status}`);
       await this.broadcastToRoom(
         connection.workspaceId,
         'workspace',
@@ -713,6 +739,12 @@ export class SocketService {
 
     // 워크스페이스에서 제거
     if (connection.workspaceId) {
+      promises.push(
+        this.messageRedisService.removeWorkspaceStatus(
+          connection.workspaceId,
+          userId,
+        ),
+      );
       promises.push(
         this.messageRedisService.removeUserFromWorkspace(
           connection.workspaceId,

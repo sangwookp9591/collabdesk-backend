@@ -36,6 +36,8 @@ export class MessageRedisService {
     USER_CONNECTION: (userId: string) => `ws:user:${userId}`,
     WORKSPACE_USERS: (workspaceId: string) =>
       `ws:workspace:${workspaceId}:users`,
+    WORKSPACE_USER_STATUS: (workspaceId: string) =>
+      `ws:workspace:${workspaceId}:status`,
     CHANNEL_USERS: (channelId: string) => `ws:channel:${channelId}:users`,
     DM_USERS: (conversationId: string) => `ws:dm:${conversationId}:users`,
 
@@ -51,6 +53,10 @@ export class MessageRedisService {
     // 사용자 상태
     USER_STATUS: (userId: string) => `status:${userId}`,
     USER_LAST_SEEN: (userId: string) => `lastseen:${userId}`,
+    USER_WORKSPACE_STATUS: (workspaceId: string, userId: string) =>
+      `status:${workspaceId}:${userId}`,
+    USER_WORKSPACE_LAST_SEEN: (workspaceId: string, userId: string) =>
+      `lastseen:${workspaceId}:${userId}`,
 
     // 타이핑 상태
     TYPING_USERS: (roomType: 'channel' | 'dm', roomId: string) =>
@@ -110,6 +116,235 @@ export class MessageRedisService {
     } catch (error) {
       this.logger.error(`Failed to set user connection: ${userId}`, error);
       throw error;
+    }
+  }
+
+  async setWorkspaceUserStatus(
+    userId: string,
+    status: 'ONLINE' | 'AWAY' | 'OFFLINE' | 'DO_NOT_DISTURB',
+    workspaceId: string,
+    customMessage?: string,
+  ): Promise<void> {
+    try {
+      const statusData = {
+        userId,
+        status,
+        customMessage: customMessage || null,
+        lastActiveAt: new Date().toISOString(),
+        timestamp: Date.now(),
+      };
+
+      const pipeline = this.redisConnection.cache.pipeline();
+
+      // 사용자 상태 저장
+      pipeline.setex(
+        MessageRedisService.KEYS.USER_WORKSPACE_STATUS(workspaceId, userId),
+        this.getTTL('user_status'),
+        JSON.stringify(statusData),
+      );
+
+      // 마지막 활동 시간 업데이트
+      pipeline.setex(
+        MessageRedisService.KEYS.USER_WORKSPACE_LAST_SEEN(workspaceId, userId),
+        this.getTTL('last_seen'),
+        Date.now().toString(),
+      );
+
+      const statusKey =
+        MessageRedisService.KEYS.WORKSPACE_USER_STATUS(workspaceId);
+      // 온라인 사용자 집합 관리
+      if (status === 'ONLINE') {
+        pipeline.sadd(`${statusKey}:online`, userId);
+        pipeline.expire(`${statusKey}:online`, this.getTTL('86400'));
+        pipeline.srem(`${statusKey}:away`, userId);
+        pipeline.srem(`${statusKey}:offline`, userId);
+        pipeline.srem(`${statusKey}:dnd`, userId);
+      } else if (status === 'AWAY') {
+        pipeline.sadd(`${statusKey}:away`, userId);
+        pipeline.expire(`${statusKey}:away`, this.getTTL('86400'));
+        pipeline.srem(`${statusKey}:online`, userId);
+        pipeline.srem(`${statusKey}:offline`, userId);
+        pipeline.srem(`${statusKey}:dnd`, userId);
+      } else if (status === 'DO_NOT_DISTURB') {
+        pipeline.sadd(`${statusKey}:dnd`, userId);
+        pipeline.expire(`${statusKey}:dnd`, this.getTTL('86400'));
+        pipeline.srem(`${statusKey}:away`, userId);
+        pipeline.srem(`${statusKey}:online`, userId);
+        pipeline.srem(`${statusKey}:offline`, userId);
+      } else if (status === 'OFFLINE') {
+        pipeline.sadd(`${statusKey}:offline`, userId);
+        pipeline.expire(`${statusKey}:offline`, this.getTTL('86400'));
+        pipeline.srem(`${statusKey}:online`, userId);
+        pipeline.srem(`${statusKey}:away`, userId);
+        pipeline.srem(`${statusKey}:dnd`, userId);
+      }
+
+      await pipeline.exec();
+
+      this.logger.debug(`User status updated: ${userId} -> ${status}`);
+    } catch (error) {
+      this.logger.error(`Failed to set user status: ${userId}`, error);
+      throw error;
+    }
+  }
+
+  async removeWorkspaceStatus(workspaceId: string, userId: string) {
+    const pipeline = this.redisConnection.cache.pipeline();
+
+    // 사용자 상태 삭제
+    pipeline.del(
+      MessageRedisService.KEYS.USER_WORKSPACE_STATUS(workspaceId, userId),
+    );
+
+    // 마지막 활동 시간 삭제
+    pipeline.del(
+      MessageRedisService.KEYS.USER_WORKSPACE_LAST_SEEN(workspaceId, userId),
+    );
+
+    const statusKey =
+      MessageRedisService.KEYS.WORKSPACE_USER_STATUS(workspaceId);
+    // 온라인 사용자 집합 식제
+    pipeline.srem(`${statusKey}:online`, userId);
+    pipeline.srem(`${statusKey}:away`, userId);
+    pipeline.srem(`${statusKey}:offline`, userId);
+    pipeline.srem(`${statusKey}:dnd`, userId);
+
+    await pipeline.exec();
+  }
+
+  async getMultipleWorkspaceUserStatus(workspaceId: string): Promise<
+    Record<
+      string,
+      {
+        userId: string;
+        status: 'ONLINE' | 'AWAY' | 'OFFLINE' | 'DO_NOT_DISTURB';
+        customMessage?: string;
+        lastActiveAt: string;
+      }
+    >
+  > {
+    try {
+      const userIds = await this.getWorkspaceUsers(workspaceId);
+      if (userIds.length === 0) return {};
+
+      const pipeline = this.redisConnection.cache.pipeline();
+      userIds.forEach((userId) => {
+        pipeline.get(
+          MessageRedisService.KEYS.USER_WORKSPACE_STATUS(workspaceId, userId),
+        );
+      });
+
+      const results = await pipeline.exec();
+      const statusMap: Record<string, any> = {};
+
+      userIds.forEach((userId, index) => {
+        const result = results?.[index];
+        if (result && result[1]) {
+          try {
+            const parsed = JSON.parse(result[1] as string);
+            statusMap[userId] = {
+              ...parsed,
+              isOnline: parsed.status !== 'OFFLINE',
+            };
+          } catch {
+            statusMap[userId] = {
+              userId,
+              status: 'OFFLINE',
+              lastActiveAt: new Date().toISOString(),
+            };
+          }
+        } else {
+          statusMap[userId] = {
+            userId,
+            status: 'OFFLINE',
+            lastActiveAt: new Date().toISOString(),
+          };
+        }
+      });
+
+      return statusMap;
+    } catch (error) {
+      this.logger.error('이용자 상태 조회 실패', error);
+      return {};
+    }
+  }
+
+  async getWorkspaceUsersByStatus(
+    workspaceId: string,
+    status: 'ONLINE' | 'AWAY' | 'OFFLINE' | 'DO_NOT_DISTURB',
+  ): Promise<string[]> {
+    try {
+      const statusKey =
+        MessageRedisService.KEYS.WORKSPACE_USER_STATUS(workspaceId);
+      let setKey: string;
+      switch (status) {
+        case 'ONLINE':
+          setKey = ':online';
+          break;
+        case 'AWAY':
+          setKey = ':away';
+          break;
+        case 'OFFLINE':
+          setKey = ':offline';
+          break;
+        case 'DO_NOT_DISTURB':
+          setKey = ':dnd';
+          break;
+      }
+
+      return await this.redisConnection.cache.smembers(`${statusKey}${setKey}`);
+    } catch (error) {
+      this.logger.error(`Failed to get users by status: ${status}`, error);
+      return [];
+    }
+  }
+
+  async getWorkspaceUsersStatus(workspaceId: string): Promise<
+    Record<
+      string,
+      {
+        userId: string;
+        status: 'ONLINE' | 'AWAY' | 'OFFLINE' | 'DO_NOT_DISTURB';
+        customMessage?: string;
+        lastActiveAt: string;
+      }
+    >
+  > {
+    const statusMap: Record<string, any> = {};
+    try {
+      const onlineUsers = await this.getWorkspaceUsersByStatus(
+        workspaceId,
+        'ONLINE',
+      );
+      const awayUsers = await this.getWorkspaceUsersByStatus(
+        workspaceId,
+        'AWAY',
+      );
+      const offlineUsers = await this.getWorkspaceUsersByStatus(
+        workspaceId,
+        'OFFLINE',
+      );
+      const dndUsers = await this.getWorkspaceUsersByStatus(
+        workspaceId,
+        'DO_NOT_DISTURB',
+      );
+
+      onlineUsers.forEach((oline) => {
+        statusMap[oline] = 'ONLINE';
+      });
+      awayUsers.forEach((away) => {
+        statusMap[away] = 'AWAY';
+      });
+      offlineUsers.forEach((offline) => {
+        statusMap[offline] = 'OFFLINE';
+      });
+      dndUsers.forEach((dnd) => {
+        statusMap[dnd] = 'DO_NOT_DISTURB';
+      });
+      return statusMap;
+    } catch (error) {
+      this.logger.error('Failed to get multiple user status', error);
+      return {};
     }
   }
 
