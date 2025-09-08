@@ -11,6 +11,7 @@ import {
   UnauthorizedException,
   Res,
   Req,
+  Logger,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -20,7 +21,8 @@ import { LoginDto } from './dto/login.dto';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  private readonly logger = new Logger(AuthController.name);
+  constructor(private readonly authService: AuthService) {}
 
   @Post('signup')
   @UseInterceptors(
@@ -125,6 +127,7 @@ export class AuthController {
     // const refreshToken = req.cookies['refreshToken'];
     if (dto.refreshToken && dto.email) {
       await this.authService.logout(dto);
+      this.logger.debug('USER LOGOUT : ', dto.email);
       res.clearCookie('refreshToken', { path: '/' });
     }
     return { message: 'Logged out successfully' };
