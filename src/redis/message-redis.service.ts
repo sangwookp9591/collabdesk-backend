@@ -53,7 +53,8 @@ export class MessageRedisService {
     USER_LAST_SEEN: (userId: string) => `lastseen:${userId}`,
 
     // 타이핑 상태
-    TYPING_USERS: (roomId: string) => `typing:${roomId}`,
+    TYPING_USERS: (roomType: 'channel' | 'dm', roomId: string) =>
+      `typing:${roomType}:${roomId}`,
 
     // 서버 클러스터 관리
     SERVER_INSTANCE: (serverId: string) => `server:${serverId}`,
@@ -320,25 +321,46 @@ export class MessageRedisService {
   }
 
   //타이핑
-  async setUserTyping(roomId: string, userId: string, userName: string) {
+  async setTypingUser(
+    userId: string,
+    roomId: string,
+    roomType: 'channel' | 'dm',
+  ) {
     try {
-      const key = MessageRedisService.KEYS.TYPING_USERS(roomId);
+      const key = MessageRedisService.KEYS.TYPING_USERS(roomType, roomId);
       await this.redisConnection.cache.sadd(key, userId);
       await this.redisConnection.cache.expire(key, this.getTTL('typing_users'));
     } catch (error) {
       this.logger.error(
-        `[FAIL][CACHE] 타핑 설정 실패: ${roomId}: ${userName}`,
+        `[FAIL][CACHE] 타핑 설정 실패 ${roomType}: ${roomId}`,
         error,
       );
     }
   }
-  async removeUserTyping(roomId: string, userId: string) {
+
+  async removeTypingUser(
+    userId: string,
+    roomId: string,
+    roomType: 'channel' | 'dm',
+  ) {
     try {
-      const key = MessageRedisService.KEYS.TYPING_USERS(roomId);
+      const key = MessageRedisService.KEYS.TYPING_USERS(roomType, roomId);
       await this.redisConnection.cache.srem(key, userId);
     } catch (error) {
       this.logger.error(
-        `[FAIL][CACHE] 타핑 삭제 실패: ${roomId}: ${userId}`,
+        `[FAIL][CACHE] 타핑 삭제 실패: ${roomId}:${userId}`,
+        error,
+      );
+    }
+  }
+
+  async getTypingUsers(roomId: string, roomType: 'channel' | 'dm') {
+    try {
+      const key = MessageRedisService.KEYS.TYPING_USERS(roomType, roomId);
+      return await this.redisConnection.cache.smembers(key);
+    } catch (error) {
+      this.logger.error(
+        `[FAIL][CACHE] 타핑 멤버 조회 실패:${roomType}:${roomId}`,
         error,
       );
     }
@@ -577,7 +599,7 @@ export class MessageRedisService {
       channel_users: 86400, // 24시간
       dm_users: 86400, // 24시간
       message_cache: 3600, // 1시간
-      typing_users: 20, // 20초
+      typing_users: 10, // 20초
       recent_messages: 3600, // 1시간
       unread_count: 604800, // 7일
     };

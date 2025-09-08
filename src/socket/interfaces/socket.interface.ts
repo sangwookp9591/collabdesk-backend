@@ -49,9 +49,7 @@ export interface MessagePayload {
 
 export interface TypingPayload {
   roomId: string;
-  userName: string;
   roomType: 'channel' | 'dm';
-  isTyping: boolean;
 }
 
 export interface ReactionPayload {

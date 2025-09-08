@@ -83,6 +83,11 @@ export class SocketGateway
     await this.socketService.joinWorkspace(client, payload.workspaceId);
   }
 
+  @SubscribeMessage('leaveWorkspace')
+  async handleLeaveWorkspace(@ConnectedSocket() client: AuthenticatedSocket) {
+    await this.socketService.leaveWorkspace(client);
+  }
+
   @SubscribeMessage('joinRoom')
   async handleJoinRoom(
     @ConnectedSocket() client: AuthenticatedSocket,
@@ -115,24 +120,47 @@ export class SocketGateway
 
   // ========== 타이핑 상태 이벤트 ==========
 
-  @SubscribeMessage('typing')
-  async handleTyping(
+  @SubscribeMessage('startTyping')
+  async handleStartTyping(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() payload: TypingPayload,
   ) {
     try {
       const userId = client.data.user.userId;
+      const { roomId, roomType } = payload;
 
-      await this.socketService.setUserTyping(
-        payload.roomId,
-        payload.roomType,
-        userId,
-        payload.isTyping,
-        payload.userName,
+      // 타이핑 상태를 Redis에 저장하고 다른 사용자들에게 브로드캐스트
+      await this.socketService.handleStartTyping(userId, roomId, roomType);
+
+      this.logger.debug(
+        `User ${userId} started typing in ${roomType}:${roomId}`,
       );
     } catch (error) {
       this.logger.error(
-        `Failed to handle typing for user ${client.data.user.userId}:`,
+        `Failed to handle start typing for user ${client.data.user.userId}:`,
+        error,
+      );
+    }
+  }
+
+  @SubscribeMessage('stopTyping')
+  async handleStopTyping(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() payload: TypingPayload,
+  ) {
+    try {
+      const userId = client.data.user.userId;
+      const { roomId, roomType } = payload;
+
+      // 타이핑 상태를 Redis에서 제거하고 다른 사용자들에게 브로드캐스트
+      await this.socketService.handleStopTyping(userId, roomId, roomType);
+
+      this.logger.debug(
+        `User ${userId} stopped typing in ${roomType}:${roomId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle stop typing for user ${client.data.user.userId}:`,
         error,
       );
     }
@@ -201,6 +229,7 @@ export class SocketGateway
         'global:notifications',
         'system:broadcasts',
         'server:heartbeat',
+        'typing:*',
       ];
 
       for (const channel of subscriptions) {
@@ -228,6 +257,10 @@ export class SocketGateway
 
   private handleRedisMessage(channel: string, message: any) {
     try {
+      if (channel.startsWith('typing:')) {
+        this.handleTypingMessage(channel, message);
+        return;
+      }
       switch (channel) {
         case 'global:notifications':
           this.server.emit('globalNotification', message);
@@ -251,6 +284,26 @@ export class SocketGateway
       );
     }
   }
+
+  private handleTypingMessage(channel: string, message: any) {
+    try {
+      const { roomId, roomType, event, data, serverId } = message;
+
+      // 같은 서버에서 발행한 메시지는 무시 (중복 방지)
+      if (serverId === this.getServerId()) {
+        return;
+      }
+
+      // 해당 룸의 사용자들에게 타이핑 상태 브로드캐스트
+      const roomKey = `${roomType}:${roomId}`;
+      this.server.to(roomKey).emit(event, data);
+
+      this.logger.debug(`Typing event ${event} broadcasted to ${roomKey}`);
+    } catch (error) {
+      this.logger.error('Failed to handle typing message:', error);
+    }
+  }
+
   private async subscribeToRedisChannel(channel: string) {
     if (this.subscribedChannels.has(channel)) {
       return;

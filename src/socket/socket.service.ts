@@ -67,6 +67,11 @@ export class SocketService {
       if (connection) {
         // 모든 룸에서 제거
         await this.leaveAllRooms(userId, connection);
+
+        await this.handleUserDisconnectTyping(userId, connection);
+
+        // 상태 변경을 다른 사용자들에게 알림
+        await this.broadcastUserStatusChange(userId, 'OFFLINE');
       }
 
       await this.messageRedisService.removeUserConnection(userId);
@@ -160,6 +165,9 @@ export class SocketService {
         await this.messageRedisService.setUserConnection(userId, connection);
       }
 
+      // 상태 변경을 다른 사용자들에게 알림
+      await this.broadcastUserStatusChange(userId, 'ONLINE');
+
       socket.emit('workspaceJoined', {
         workspaceId: workspaceId,
         joinedChannels: userChannels.map((c) => c.id),
@@ -172,6 +180,17 @@ export class SocketService {
         error,
       );
       socket.emit('error', { message: 'Failed to join workspace' });
+    }
+  }
+
+  async leaveWorkspace(socket: AuthenticatedSocket) {
+    const userId = socket.data?.user?.userId;
+    this.connectedUsers.delete(userId);
+
+    const connection = await this.messageRedisService.getUserConnection(userId);
+
+    if (connection) {
+      await this.leaveAllRooms(userId, connection);
     }
   }
 
@@ -376,6 +395,205 @@ export class SocketService {
     }
   }
 
+  // ========== 타이핑 상태 관리 ==========
+
+  async handleStartTyping(
+    userId: string,
+    roomId: string,
+    roomType: 'channel' | 'dm',
+  ): Promise<void> {
+    try {
+      // 1. Redis에 타이핑 상태 저장 (TTL 10초)
+      await this.messageRedisService.setTypingUser(userId, roomId, roomType);
+
+      // 2. 사용자 정보 가져오기
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, name: true, email: true, profileImageUrl: true },
+      });
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      // 3. 같은 룸의 다른 사용자들에게 타이핑 시작 알림
+      const typingData = {
+        userId,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          profileImageUrl: user.profileImageUrl,
+        },
+        roomId,
+        roomType,
+        timestamp: Date.now(),
+      };
+
+      // 현재 서버의 사용자들에게 전송 (발신자 제외)
+      await this.messageToRoom(
+        roomId,
+        roomType,
+        'userStartTyping',
+        typingData,
+        userId, // 발신자 제외
+      );
+
+      this.logger.debug(
+        `User ${userId} started typing in ${roomType}:${roomId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle start typing: ${userId}:${roomType}:${roomId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async handleStopTyping(
+    userId: string,
+    roomId: string,
+    roomType: 'channel' | 'dm',
+  ): Promise<void> {
+    try {
+      // 1. Redis에서 타이핑 상태 제거
+      await this.messageRedisService.removeTypingUser(userId, roomId, roomType);
+
+      // 2. 같은 룸의 다른 사용자들에게 타이핑 종료 알림
+      const typingData = {
+        userId,
+        roomId,
+        roomType,
+        timestamp: Date.now(),
+      };
+
+      // 현재 서버의 사용자들에게 전송 (발신자 제외)
+      await this.messageToRoom(
+        roomId,
+        roomType,
+        'userStopTyping',
+        typingData,
+        userId, // 발신자 제외
+      );
+
+      this.logger.debug(
+        `User ${userId} stopped typing in ${roomType}:${roomId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle stop typing: ${userId}:${roomType}:${roomId}`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  async getTypingUsers(
+    roomId: string,
+    roomType: 'channel' | 'dm',
+  ): Promise<any[]> {
+    try {
+      const typingUserIds = await this.messageRedisService.getTypingUsers(
+        roomId,
+        roomType,
+      );
+
+      if (typingUserIds && typingUserIds.length === 0) {
+        return [];
+      }
+
+      // 사용자 정보 가져오기
+      const users = await this.prisma.user.findMany({
+        where: { id: { in: typingUserIds } },
+        select: { id: true, name: true, email: true, profileImageUrl: true },
+      });
+
+      return users.map((user) => ({
+        userId: user.id,
+        user,
+        timestamp: Date.now(),
+      }));
+    } catch (error) {
+      this.logger.error(
+        `Failed to get typing users: ${roomType}:${roomId}`,
+        error,
+      );
+      return [];
+    }
+  }
+
+  private async handleUserDisconnectTyping(
+    userId: string,
+    connection: UserConnection,
+  ): Promise<void> {
+    try {
+      const promises: Promise<any>[] = [];
+
+      // 참여 중인 모든 채널에서 타이핑 상태 제거
+      for (const channelId of connection.joinedChannels) {
+        promises.push(
+          this.messageRedisService.removeTypingUser(
+            userId,
+            channelId,
+            'channel',
+          ),
+        );
+
+        // 다른 사용자들에게 타이핑 중지 알림
+        promises.push(
+          this.messageToRoom(
+            channelId,
+            'channel',
+            'userStopTyping',
+            {
+              userId,
+              roomId: channelId,
+              roomType: 'channel',
+              timestamp: Date.now(),
+              reason: 'disconnect',
+            },
+            userId,
+          ),
+        );
+      }
+
+      // 참여 중인 모든 DM에서 타이핑 상태 제거
+      for (const dmId of connection.joinedDMConversations) {
+        promises.push(
+          this.messageRedisService.removeTypingUser(userId, dmId, 'dm'),
+        );
+
+        // 다른 사용자들에게 타이핑 중지 알림
+        promises.push(
+          this.messageToRoom(
+            dmId,
+            'dm',
+            'userStopTyping',
+            {
+              userId,
+              roomId: dmId,
+              roomType: 'dm',
+              timestamp: Date.now(),
+              reason: 'disconnect',
+            },
+            userId,
+          ),
+        );
+      }
+
+      await Promise.all(promises);
+      this.logger.debug(
+        `Cleared typing status for disconnected user: ${userId}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle user disconnect typing: ${userId}`,
+        error,
+      );
+    }
+  }
+
   // ========== 사용자 상태 관리 ==========
 
   async updateUserStatus(
@@ -416,44 +634,6 @@ export class SocketService {
           status,
           lastActiveAt: connection.lastActiveAt.toISOString(),
         },
-      );
-    }
-  }
-  // 타이핑
-
-  async setUserTyping(
-    roomId: string,
-    roomType: 'channel' | 'dm',
-    userId: string,
-    isTyping: boolean,
-    userName: string,
-  ): Promise<void> {
-    try {
-      const roomKey = `${roomType}:${roomId}`;
-      const socket = this.connectedUsers.get(userId);
-
-      if (isTyping) {
-        await this.messageRedisService.setUserTyping(roomId, userId, userName);
-      } else {
-        await this.messageRedisService.removeUserTyping(roomId, userId);
-      }
-
-      // 같은 룸의 다른 사용자들에게 타이핑 상태 전송 (본인 제외)
-      socket?.to(roomKey).emit('userTyping', {
-        userId,
-        userName,
-        roomId,
-        roomType,
-        isTyping,
-      });
-
-      this.logger.debug(
-        `User ${userId} typing status: ${isTyping} in ${roomType} ${roomId}`,
-      );
-    } catch (error) {
-      this.logger.error(
-        `Failed to set typing status for user ${userId}:`,
-        error,
       );
     }
   }
