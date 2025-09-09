@@ -344,6 +344,18 @@ export class DmService {
           include: { user: { select: userFields } },
           orderBy: { createdAt: 'desc' },
         },
+        mentions: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
       },
       orderBy: { createdAt: 'desc' },
       take,
@@ -385,7 +397,11 @@ export class DmService {
       status: true,
       profileImageUrl: true,
     };
-    return await this.prisma.message.create({
+
+    // 멘션 파싱
+    const mentions = this.parseMentions(dto?.content);
+
+    const message = await this.prisma.message.create({
       data: {
         userId,
         messageType: 'DM',
@@ -403,9 +419,82 @@ export class DmService {
         },
       },
     });
+
+    // 멘션 저장
+    if (mentions.length > 0) {
+      await this.createMentions(message.id, mentions);
+    }
+
+    // DM 대화방 업데이트 시간 갱신
+    await this.prisma.dMConversation.update({
+      where: { id: dto.dmConversationId },
+      data: { updatedAt: new Date() },
+    });
+
+    return message;
   }
 
   private sortUserIds(user1Id: string, user2Id: string) {
     return [user1Id, user2Id].sort();
+  }
+
+  // 멘션 파싱 (@username 형태)
+  private parseMentions(content: string): string[] {
+    const mentionRegex = /@(\w+)/g;
+    const mentions: string[] = [];
+    let match;
+
+    while ((match = mentionRegex.exec(content)) !== null) {
+      mentions.push(match[1]);
+    }
+
+    return mentions;
+  }
+
+  // 멘션 생성
+  private async createMentions(messageId: string, mentions: string[]) {
+    // username으로 사용자 찾기
+    const users = await this.prisma.user.findMany({
+      where: {
+        name: {
+          in: mentions,
+        },
+      },
+      select: { id: true },
+    });
+
+    // 멘션 생성
+    const mentionData = users.map((user) => ({
+      messageId,
+      userId: user.id,
+    }));
+
+    if (mentionData.length > 0) {
+      await this.prisma.mention.createMany({
+        data: mentionData,
+        skipDuplicates: true,
+      });
+    }
+  }
+
+  // 읽지 않은 DM 메시지 수 조회
+  async getUnreadDMCount(userId: string) {
+    const conversations = await this.prisma.dMConversation.findMany({
+      where: {
+        OR: [{ user1Id: userId }, { user2Id: userId }],
+      },
+      include: {
+        messages: {
+          where: {
+            userId: { not: userId }, // 본인이 보낸 메시지가 아닌 것
+          },
+        },
+      },
+    });
+
+    return conversations.reduce(
+      (total, conv) => total + conv.messages.length,
+      0,
+    );
   }
 }

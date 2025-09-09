@@ -376,6 +376,18 @@ export class MessageService {
           include: { user: { select: userFields } },
           orderBy: { createdAt: 'desc' },
         },
+        mentions: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
       },
       orderBy: { createdAt: 'desc' },
       take,
