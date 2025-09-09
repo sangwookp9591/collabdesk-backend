@@ -174,13 +174,14 @@ model Message {
 model Mention {
   id        String   @id @default(cuid())
   messageId String
-  userId    String   // 멘션된 사용자
+  userId    String?   // 멘션된 사용자
+  type      MentionType @default(USER)
   isRead    Boolean  @default(false)
   readAt    DateTime?
   createdAt DateTime @default(now())
   
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@unique([messageId, userId])
   @@map("mentions")
@@ -294,4 +295,10 @@ enum InviteStatus {
   ACCEPTED
   DECLINED
   EXPIRED
+}
+
+enum MentionType {
+  USER
+  HERE
+  EVERYONE
 }
