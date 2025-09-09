@@ -373,6 +373,29 @@ export class SocketService {
     }
   }
 
+  async sendToWorkspaceUsersFiltered(
+    workspaceId: string,
+    targetUserIds: string[],
+    event: string,
+    data: any,
+  ) {
+    // 1. 워크스페이스 참여 중인 유저 확인
+    const workspaceUsers =
+      await this.messageRedisService.getWorkspaceUsers(workspaceId);
+
+    const validUserIds = targetUserIds.filter((id) =>
+      workspaceUsers.includes(id),
+    );
+
+    if (validUserIds.length === 0) return;
+
+    // 2. sendToMultipleUsers 재사용
+    await this.sendToMultipleUsers(validUserIds, event, {
+      ...data,
+      workspaceId,
+    });
+  }
+
   async sendToMultipleUsers(
     userIds: string[],
     event: string,
