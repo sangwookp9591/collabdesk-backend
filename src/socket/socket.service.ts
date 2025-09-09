@@ -282,6 +282,10 @@ export class SocketService {
     }
   }
 
+  async getChannelUsers(channelId: string) {
+    return await this.messageRedisService.getChannelUsers(channelId);
+  }
+
   async channelCreated(channel: Channel) {
     await this.messageRedisService.publishMessage(
       `workspace:${channel?.workspaceId}`,
@@ -304,6 +308,10 @@ export class SocketService {
     );
 
     return channel;
+  }
+
+  async getDMUsers(dmId: string) {
+    return await this.getDMUsers(dmId);
   }
 
   async sendToUser(userId: string, event: string, data: any): Promise<void> {
