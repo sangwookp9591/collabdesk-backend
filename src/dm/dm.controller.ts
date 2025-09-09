@@ -95,6 +95,7 @@ export class DmController {
     @Body()
     createMessageDto: {
       content: string;
+      mentionIds: string[];
       parentId?: string;
     },
     @Param('slug') slug: string,
@@ -105,6 +106,12 @@ export class DmController {
       dmConversationId: conversationId,
       content: createMessageDto.content,
       parentId: createMessageDto.parentId,
+      mentionIds: createMessageDto.mentionIds ?? [],
     });
+  }
+
+  @Get('conversations/:conversationId/messages/unread')
+  async getUnreadDMCount(@CurrentUser('sub') userId: string) {
+    return this.dmService.getUnreadDMCount(userId);
   }
 }
