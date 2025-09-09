@@ -19,6 +19,7 @@ import { Throttle } from '@nestjs/throttler';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import { WorkspaceMemberGuard } from 'src/workspace/guards/workspace-member.guard';
+import { MentionType } from '@prisma/client';
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class MessageController {
@@ -41,7 +42,7 @@ export class MessageController {
     createMessageDto: {
       content: string;
       parentId?: string;
-      mentionIds?: string[];
+      mentions?: { type: MentionType; userId: string }[];
     },
     @Param('slug') slug: string,
     @Param('channelSlug') channelSlug: string,
@@ -51,7 +52,7 @@ export class MessageController {
       channelSlug: channelSlug,
       content: createMessageDto.content,
       parentId: createMessageDto.parentId,
-      mentionIds: createMessageDto.mentionIds,
+      mentions: createMessageDto.mentions,
     });
   }
 

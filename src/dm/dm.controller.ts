@@ -20,6 +20,7 @@ import { MessageService } from '../message/message.service';
 import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
+import { MentionType } from '@prisma/client';
 
 @Controller('workspaces/:slug/dm')
 @UseGuards(JwtAuthGuard, WorkspaceMemberGuard)
@@ -95,7 +96,7 @@ export class DmController {
     @Body()
     createMessageDto: {
       content: string;
-      mentionIds: string[];
+      mentions?: { type: MentionType; userId: string }[];
       parentId?: string;
     },
     @Param('slug') slug: string,
@@ -106,7 +107,7 @@ export class DmController {
       dmConversationId: conversationId,
       content: createMessageDto.content,
       parentId: createMessageDto.parentId,
-      mentionIds: createMessageDto.mentionIds ?? [],
+      mentions: createMessageDto.mentions ?? [],
     });
   }
 

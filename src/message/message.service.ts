@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { GetMessagesQueryDto } from './dto/get-message-by-channel';
-import { MessageType } from '@prisma/client';
+import { MentionType, MessageType } from '@prisma/client';
 import { SocketService } from 'src/socket/socket.service';
 
 @Injectable()
@@ -25,7 +25,7 @@ export class MessageService {
       content: string;
       parentId?: string;
       dmConversationId?: string;
-      mentionIds?: string[];
+      mentions?: { type: MentionType; userId: string }[];
     },
   ) {
     let channelId: any = null;
@@ -155,13 +155,14 @@ export class MessageService {
           });
         }
 
-        this.logger.debug('dto.mentionIds  : ', dto.mentionIds);
-        if (message && dto.mentionIds) {
+        this.logger.debug('dto.mentions  : ', dto.mentions);
+        if (message && dto.mentions) {
           await Promise.all(
-            dto.mentionIds.map((mentionId) => {
+            dto.mentions.map((mention) => {
               return prisma.mention.create({
                 data: {
-                  userId: mentionId,
+                  type: mention?.type,
+                  userId: mention?.type === 'USER' ? mention?.userId : null,
                   messageId: message.id,
                 },
               });
@@ -172,17 +173,25 @@ export class MessageService {
         return message;
       });
 
+      const roomId = channelId ? result?.channelId : result?.dmConversationId;
+      const roomType = channelId ? 'channel' : 'dm';
+
+      const mentionUsers = await this.processMentionedUsers(
+        roomId!,
+        roomType,
+        dto.mentions,
+      );
       // 4. 후속 처리들 (트랜잭션 외부에서 실행)
       await Promise.all([
         this.socketService.sendToWorkspaceUsersFiltered(
           workspaceId,
-          dto.mentionIds ?? [],
+          mentionUsers,
           'workspaceNotice',
           {
             type: 'mention',
             data: {
-              roomId: channelId ? result?.channelId : result?.dmConversationId,
-              roomType: channelId ? 'channel' : 'dm',
+              roomId: roomId,
+              roomType: roomType,
               messageId: result?.id,
               title: channelId
                 ? `${result?.channel?.name}에서 이용자님을 언급했습니다.`
@@ -489,6 +498,32 @@ export class MessageService {
       },
     });
   }
+
+  //process
+
+  private async processMentionedUsers(
+    roomId: string,
+    roomType: string,
+    mentions?: { type: MentionType; userId?: string }[],
+  ): Promise<string[]> {
+    if (!(mentions && mentions?.length > 0)) {
+      return [];
+    }
+    const specialMention = mentions.find(
+      (item) => item.type === 'HERE' || item.type === 'EVERYONE',
+    );
+
+    if (specialMention) {
+      if (roomType === 'channel') {
+        return await this.socketService.getChannelUsers(roomId);
+      }
+      return await this.socketService.getDMUsers(roomId);
+    } else {
+      return mentions.filter((item) => item.userId).map((item) => item.userId!);
+    }
+  }
+
+  //validate
   private async validateChannelAccess(channelId: string, userId: string) {
     const member = await this.prisma.channelMember.findUnique({
       where: {
@@ -530,6 +565,7 @@ export class MessageService {
     }
   }
 
+  //message
   private async validateParentMessage(
     parentId: string,
     channelId?: string,
