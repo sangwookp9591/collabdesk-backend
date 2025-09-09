@@ -41,6 +41,7 @@ export class MessageController {
     createMessageDto: {
       content: string;
       parentId?: string;
+      mentionIds?: string[];
     },
     @Param('slug') slug: string,
     @Param('channelSlug') channelSlug: string,
@@ -50,6 +51,7 @@ export class MessageController {
       channelSlug: channelSlug,
       content: createMessageDto.content,
       parentId: createMessageDto.parentId,
+      mentionIds: createMessageDto.mentionIds,
     });
   }
 

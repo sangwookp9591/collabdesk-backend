@@ -25,6 +25,7 @@ export class MessageService {
       content: string;
       parentId?: string;
       dmConversationId?: string;
+      mentionIds?: string[];
     },
   ) {
     let channelId: any = null;
@@ -154,14 +155,43 @@ export class MessageService {
           });
         }
 
+        this.logger.debug('dto.mentionIds  : ', dto.mentionIds);
+        if (message && dto.mentionIds) {
+          await Promise.all(
+            dto.mentionIds.map((mentionId) => {
+              return prisma.mention.create({
+                data: {
+                  userId: mentionId,
+                  messageId: message.id,
+                },
+              });
+            }),
+          );
+        }
+
         return message;
       });
 
       // 4. 후속 처리들 (트랜잭션 외부에서 실행)
       await Promise.all([
-        // 멘션 처리
-        // this.processMentions(result, dto.content),
-
+        this.socketService.sendToWorkspaceUsersFiltered(
+          workspaceId,
+          dto.mentionIds ?? [],
+          'workspaceNotice',
+          {
+            type: 'mention',
+            data: {
+              roomId: channelId ? result?.channelId : result?.dmConversationId,
+              roomType: channelId ? 'channel' : 'dm',
+              messageId: result?.id,
+              title: channelId
+                ? `${result?.channel?.name}에서 이용자님을 언급했습니다.`
+                : `${result?.user?.name}이 이용자님을 언급했습니다.`,
+              message: result?.content,
+              byUserId: userId,
+            },
+          },
+        ),
         // Redis 캐싱
         this.socketService.cacheMessage(result),
 
