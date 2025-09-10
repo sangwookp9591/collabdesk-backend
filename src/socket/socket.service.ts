@@ -465,12 +465,6 @@ export class SocketService {
       // 3. 같은 룸의 다른 사용자들에게 타이핑 시작 알림
       const typingData = {
         userId,
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          profileImageUrl: user.profileImageUrl,
-        },
         roomId,
         roomType,
         timestamp: Date.now(),
@@ -716,6 +710,92 @@ export class SocketService {
       this.logger.error(`Failed to cache message ${message.id}:`, error);
       // 캐싱 실패해도 메시지는 성공으로 처리
     }
+  }
+
+  async updateReadNotification(userId: string, messageId: string) {
+    const notification = await this.prisma.notification.findFirst({
+      where: {
+        userId: userId,
+        messageId: messageId,
+        isRead: false,
+      },
+    });
+    if (notification) {
+      return await this.prisma.notification.update({
+        where: {
+          id: notification.id,
+        },
+        data: {
+          isRead: true,
+          readAt: new Date(),
+        },
+        select: {
+          id: true,
+        },
+      });
+    } else {
+      return null;
+    }
+  }
+
+  async updateReadLastMessage(
+    userId: string,
+    roomId: string,
+    roomType: 'channel' | 'dm',
+    lastReadMessageId: string,
+  ) {
+    const message = await this.prisma.message.findUnique({
+      where: {
+        id: lastReadMessageId,
+      },
+    });
+    if (!message) {
+      return null;
+    }
+
+    if (roomType === 'channel') {
+      await this.prisma.channelMember.update({
+        where: {
+          userId_channelId: { userId, channelId: roomId },
+        },
+        data: {
+          lastReadMessageId: lastReadMessageId,
+        },
+      });
+    } else {
+      const dMConversation = await this.prisma.dMConversation.findUnique({
+        where: {
+          id: roomId,
+        },
+        select: {
+          id: true,
+          user1Id: true,
+          user2Id: true,
+        },
+      });
+      if (dMConversation) {
+        if (dMConversation.user1Id === userId) {
+          await this.prisma.dMConversation.update({
+            where: {
+              id: dMConversation.id,
+            },
+            data: {
+              user1LastReadMessageId: lastReadMessageId,
+            },
+          });
+        } else {
+          await this.prisma.dMConversation.update({
+            where: {
+              id: dMConversation.id,
+            },
+            data: {
+              user2LastReadMessageId: lastReadMessageId,
+            },
+          });
+        }
+      }
+    }
+    return lastReadMessageId;
   }
 
   async updateUnreadCounts(message: any, senderId: string) {
