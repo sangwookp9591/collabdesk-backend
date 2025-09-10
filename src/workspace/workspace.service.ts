@@ -301,6 +301,20 @@ export class WorkspaceService {
     };
   }
 
+  async initNotifications(userId: string, workspaceId: string) {
+    return await this.prisma.notification.findMany({
+      where: {
+        userId: userId,
+        isRead: false,
+        workspaceId: workspaceId,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 10,
+    });
+  }
+
   async workspaceBySlug(slug: string) {
     const workspace = await this.prisma.workspace.findUnique({
       where: {
@@ -321,8 +335,12 @@ export class WorkspaceService {
   async workspaceInitBySlug(slug: string, userId: string) {
     const workspaces = await this.findManyByUserId(userId);
     const currentWorkspace = await this.workspaceBySlug(slug);
+    const notifications = await this.initNotifications(
+      userId,
+      currentWorkspace.id!,
+    );
 
-    return { workspaces, currentWorkspace };
+    return { workspaces, currentWorkspace, notifications };
   }
 
   async joinWorkspace(userId: string, workspaceId: string) {
