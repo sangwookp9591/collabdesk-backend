@@ -71,7 +71,7 @@ export class ChannelService {
     if (!workspace) {
       throw new NotFoundException('워크스페이스를 찾을 수 없습니다.');
     }
-    return await this.prisma.channel.findMany({
+    const channnels = await this.prisma.channel.findMany({
       where: {
         workspaceId: workspace?.id,
         name: search ? { contains: search } : undefined,
@@ -94,6 +94,17 @@ export class ChannelService {
       skip: (page - 1) * take,
       take: take,
     });
+
+    const channnelsWithLastMessage = channnels?.map((channel) => {
+      return {
+        ...channel,
+        lastReadMessageId:
+          channel.members && channel.members?.length > 0
+            ? channel.members[0].lastReadMessageId
+            : null,
+      };
+    });
+    return channnelsWithLastMessage;
   }
 
   async create(
@@ -161,8 +172,9 @@ export class ChannelService {
       },
     });
 
-    await this.notifyChannelCreated(channel);
-    return channel;
+    const channelWithLastMessage = { ...channel, lastReadMessageId: null };
+    await this.notifyChannelCreated(channelWithLastMessage);
+    return channelWithLastMessage;
   }
 
   async findOne(slug: string) {
