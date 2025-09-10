@@ -32,6 +32,7 @@ model User {
   dmConversations2      DMConversation[]  @relation("DMUser2")
   mentions              Mention[]
   reactions             Reaction[]
+  notifications         Notification[]
 
   @@map("users")
 }
@@ -79,7 +80,7 @@ model Workspace {
   members         WorkspaceMember[]
   dmConversations DMConversation[]
   owner           User              @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-
+  notifications   Notification[]
   @@map("workspaces")
 }
 
@@ -114,7 +115,7 @@ model Channel {
   createdBy   User            @relation("UserChannelsCreated", fields: [createdById], references: [id])
   workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   messages    Message[]
-
+  notifications         Notification[]
   @@unique([workspaceId, name])
   @@map("channels")
 }
@@ -168,6 +169,7 @@ model Message {
   dmConversation    DMConversation? @relation(fields: [dmConversationId], references: [id], onDelete: Cascade)
   mentions          Mention[]
   reactions         Reaction[]
+  notifications     Notification[]
   @@map("messages")
 }
 
@@ -215,7 +217,8 @@ model DMConversation {
   user2                   User            @relation("DMUser2", fields: [user2Id], references: [id], onDelete: Cascade)
   workspace               Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   messages                Message[]
-  
+  notifications           Notification[]
+
   @@unique([workspaceId, user1Id, user2Id])
   @@map("dm_conversations")
 }
@@ -256,6 +259,28 @@ model ChannelInvite {
 
   @@unique([email, channelId])
   @@map("channel_invites")
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  userId      String           // 알림을 받는 사용자
+  type        NotificationType // 알림 종류
+  messageId   String?          // 메시지 기반 알림 (멘션, 새 메시지 등)
+  workspaceId String?          // 워크스페이스 알림 (시스템 알림 등)
+  channelId   String?          // 채널 알림
+  dmId        String?          // DM 알림
+  isRead      Boolean          @default(false)
+  readAt      DateTime?
+  data        Json?            // 추가 데이터 (ex. system 이벤트 설명, 멘션된 사용자 등)
+  createdAt   DateTime         @default(now())
+
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message     Message?         @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  workspace   Workspace?       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  channel     Channel?         @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  dm          DMConversation?  @relation(fields: [dmId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
 }
 
 
@@ -305,3 +330,11 @@ enum MentionType {
   HERE
   EVERYONE
 }
+
+enum NotificationType {
+  MENTION        // 멘션 알림 (@user, @here, @everyone)
+  SYSTEM         // 시스템 알림 (워크스페이스 초대, 채널 초대, 역할 변경 등)
+  NEW_MESSAGE    // 새 메시지 알림 (DM, 채널 메시지)
+  REACTION       // 내 메시지에 반응 달렸을 때
+}
+
