@@ -262,23 +262,23 @@ model ChannelInvite {
 }
 
 model Notification {
-  id          String           @id @default(cuid())
-  userId      String           // 알림을 받는 사용자
-  type        NotificationType // 알림 종류
-  messageId   String?          // 메시지 기반 알림 (멘션, 새 메시지 등)
-  workspaceId String?          // 워크스페이스 알림 (시스템 알림 등)
-  channelId   String?          // 채널 알림
-  dmId        String?          // DM 알림
-  isRead      Boolean          @default(false)
-  readAt      DateTime?
-  data        Json?            // 추가 데이터 (ex. system 이벤트 설명, 멘션된 사용자 등)
-  createdAt   DateTime         @default(now())
+  id                String           @id @default(cuid())
+  userId            String           // 알림을 받는 사용자
+  type              NotificationType // 알림 종류
+  messageId         String?          // 메시지 기반 알림 (멘션, 새 메시지 등)
+  workspaceId       String?          // 워크스페이스 알림 (시스템 알림 등)
+  channelId         String?          // 채널 알림
+  dmConversationId  String?          // DM 알림
+  isRead            Boolean          @default(false)
+  readAt            DateTime?
+  data              Json?            // 추가 데이터 (ex. system 이벤트 설명, 멘션된 사용자 등)
+  createdAt         DateTime         @default(now())
 
-  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  message     Message?         @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  workspace   Workspace?       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  channel     Channel?         @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  dm          DMConversation?  @relation(fields: [dmId], references: [id], onDelete: Cascade)
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message           Message?         @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  workspace         Workspace?       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  channel           Channel?         @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  dmConversation   DMConversation?  @relation(fields: [dmConversationId], references: [id], onDelete: Cascade)
 
   @@map("notifications")
 }
