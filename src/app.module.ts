@@ -17,6 +17,7 @@ import { MailModule } from './mail/mail.module';
 import { SocketModule } from './socket/socket.module';
 import { InviteModule } from './invite/invite.module';
 import { DmModule } from './dm/dm.module';
+import { MentionModule } from './mention/mention.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { DmModule } from './dm/dm.module';
     SocketModule,
     InviteModule,
     DmModule,
+    MentionModule,
   ],
   controllers: [AppController],
   providers: [AppService],
