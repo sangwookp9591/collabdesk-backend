@@ -185,8 +185,8 @@ export class SocketGateway
     }
   }
 
-  @SubscribeMessage('markAsRead')
-  async handleMarkAsRead(
+  @SubscribeMessage('markAsReadMessage')
+  async handleMarkAsReadMessage(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody()
     payload: {
@@ -197,21 +197,74 @@ export class SocketGateway
   ) {
     try {
       const userId = client.data.user.userId;
+      if (payload.lastReadMessageId) {
+        await this.messageRedisService.resetUnreadCount(
+          userId,
+          payload.roomId,
+          payload.roomType,
+        );
+
+        // DB Update
+        const isSyncedMessageId =
+          await this.socketService.updateReadLastMessage(
+            userId,
+            payload.roomId,
+            payload.roomType,
+            payload.lastReadMessageId,
+          );
+
+        // 읽음 상태를 다른 기기들에게도 동기화
+        if (isSyncedMessageId) {
+          await this.socketService.sendToUser(userId, 'readMessageSync', {
+            userId: userId,
+            roomId: payload.roomId,
+            roomType: payload.roomType,
+            lastReadMessageId: payload.lastReadMessageId,
+            readAt: new Date().toISOString(),
+          });
+        }
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to mark as read for user ${client.data.user.userId}:`,
+        error,
+      );
+    }
+  }
+
+  @SubscribeMessage('markAsReadNotification')
+  async handleMarkAsReadNotification(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody()
+    payload: {
+      messageId?: string;
+    },
+  ) {
+    try {
+      // Redis에서 읽지 않은 카운터 초기화
+      const userId = client.data.user.userId;
 
       // Redis에서 읽지 않은 카운터 초기화
-      await this.messageRedisService.resetUnreadCount(
-        userId,
-        payload.roomId,
-        payload.roomType,
-      );
+      if (payload.messageId) {
+        const nt = await this.socketService.updateReadNotification(
+          userId,
+          payload.messageId,
+        );
 
-      // 읽음 상태를 다른 기기들에게도 동기화
-      await this.socketService.sendToUser(userId, 'readStatusSync', {
-        roomId: payload.roomId,
-        roomType: payload.roomType,
-        lastReadMessageId: payload.lastReadMessageId,
-        readAt: new Date().toISOString(),
-      });
+        // 읽음 상태를 다른 기기들에게도 동기화
+        if (nt) {
+          await this.socketService.sendToUser(userId, 'readNotificationSync', {
+            id: nt?.id,
+            messageId: payload.messageId,
+            readAt: new Date().toISOString(),
+          });
+        } else {
+          await this.socketService.sendToUser(userId, 'readNotificationSync', {
+            id: null,
+            messageId: payload.messageId,
+          });
+        }
+      }
     } catch (error) {
       this.logger.error(
         `Failed to mark as read for user ${client.data.user.userId}:`,
