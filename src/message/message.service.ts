@@ -8,6 +8,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { GetMessagesQueryDto } from './dto/get-message-by-channel';
 import { MentionType, MessageType } from '@prisma/client';
 import { SocketService } from 'src/socket/socket.service';
+import { NotificationQueue } from 'src/worker/notification/notification.queue';
 
 @Injectable()
 export class MessageService {
@@ -15,6 +16,7 @@ export class MessageService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly socketService: SocketService,
+    private readonly notificationQueue: NotificationQueue,
   ) {}
 
   async createMessage(
@@ -173,34 +175,20 @@ export class MessageService {
         return message;
       });
 
-      const roomId = channelId ? result?.channelId : result?.dmConversationId;
-      const roomType = channelId ? 'channel' : 'dm';
+      if (dto.mentions) {
+        const roomId = channelId ? result?.channelId : result?.dmConversationId;
+        const roomType = channelId ? 'channel' : 'dm';
 
-      const mentionUsers = await this.processMentionedUsers(
-        roomId!,
-        roomType,
-        dto.mentions,
-      );
-      // 4. 후속 처리들 (트랜잭션 외부에서 실행)
-      await Promise.all([
-        this.socketService.sendToWorkspaceUsersFiltered(
+        await this.processMention(
           workspaceId,
-          mentionUsers,
-          'workspaceNotice',
-          {
-            type: 'mention',
-            data: {
-              roomId: roomId,
-              roomType: roomType,
-              messageId: result?.id,
-              title: channelId
-                ? `${result?.channel?.name}에서 이용자님을 언급했습니다.`
-                : `${result?.user?.name}이 이용자님을 언급했습니다.`,
-              message: result?.content,
-              byUserId: userId,
-            },
-          },
-        ),
+          result,
+          roomId!,
+          roomType,
+          dto.mentions,
+        );
+      }
+
+      await Promise.all([
         // Redis 캐싱
         this.socketService.cacheMessage(result),
 
@@ -500,6 +488,68 @@ export class MessageService {
   }
 
   //process
+  private async processMention(
+    workspaceId: string,
+    message: any,
+    roomId: string,
+    roomType: string,
+    mentions?: { type: MentionType; userId: string }[],
+  ) {
+    let usersIds: string[] | undefined = [];
+    const publishUserIds = await this.processMentionedUsers(
+      roomId,
+      roomType,
+      mentions,
+    );
+    // 후속 처리들 (트랜잭션 외부에서 실행)
+
+    const specialMention = mentions?.find(
+      (item) => item.type === 'HERE' || item.type === 'EVERYONE',
+    );
+    if (specialMention) {
+      usersIds = (await this.roomAllUsers(roomId, roomType)) ?? [];
+    } else {
+      usersIds = mentions?.map((mention) => mention.userId);
+    }
+
+    if (publishUserIds && publishUserIds?.length > 0) {
+      await this.socketService.sendToWorkspaceUsersFiltered(
+        workspaceId,
+        publishUserIds,
+        'workspaceNotice',
+        {
+          data: {
+            type: 'MENTION',
+            roomId: roomId,
+            roomType: roomType,
+            messageId: message?.id,
+            data: message?.channelId
+              ? `${message?.channel?.name}에서 이용자님을 언급했습니다.`
+              : `${message?.user?.name}이 이용자님을 언급했습니다.`,
+            message: {
+              id: message?.id,
+              content: message?.id,
+              createdAt: message?.createdAt,
+              messageType: 'USER',
+            },
+          },
+        },
+      );
+    }
+    if (usersIds && usersIds.length > 0) {
+      await this.notificationQueue.addJob('notification', {
+        workspaceId,
+        userIds: usersIds,
+        type: 'MENTION',
+        roomId,
+        roomType,
+        messageId: message?.id,
+        data: message.channelId
+          ? `${message?.channel?.name}에서 이용자님을 언급했습니다.`
+          : `${message?.user?.name}이 이용자님을 언급했습니다.`,
+      });
+    }
+  }
 
   private async processMentionedUsers(
     roomId: string,
@@ -591,6 +641,36 @@ export class MessageService {
       throw new ForbiddenException(
         'Parent message is not in the same DM conversation',
       );
+    }
+  }
+
+  private async roomAllUsers(roomId: string, roomType: string) {
+    if (roomType && roomId) {
+      if (roomType === 'channel') {
+        const chMember = await this.prisma.channelMember.findMany({
+          where: {
+            channelId: roomId,
+          },
+          select: {
+            userId: true,
+          },
+        });
+        return chMember?.map((member) => member.userId);
+      } else {
+        const dmMember = await this.prisma.dMConversation.findUnique({
+          where: {
+            id: roomId,
+          },
+          select: {
+            user1Id: true,
+            user2Id: true,
+          },
+        });
+        const { user1Id, user2Id } = dmMember!;
+        return [user1Id, user2Id];
+      }
+    } else {
+      return [];
     }
   }
 
