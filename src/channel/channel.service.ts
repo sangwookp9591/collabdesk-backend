@@ -81,6 +81,13 @@ export class ChannelService {
           },
         },
       },
+      include: {
+        members: {
+          select: {
+            lastReadMessageId: true,
+          },
+        },
+      },
       orderBy: {
         [orderBy]: 'asc',
       },
