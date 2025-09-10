@@ -528,7 +528,7 @@ export class MessageService {
               : `${message?.user?.name}이 이용자님을 언급했습니다.`,
             message: {
               id: message?.id,
-              content: message?.id,
+              content: message?.content,
               createdAt: message?.createdAt,
               messageType: 'USER',
             },
