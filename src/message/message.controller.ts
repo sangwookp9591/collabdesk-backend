@@ -13,7 +13,10 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/jwt-token/guards/jwt-auth.guard';
 import { MessageService } from './message.service';
-import { GetMessagesQueryDto } from './dto/get-message-by-channel';
+import {
+  GetMessagesQueryDto,
+  GetJumpMessageQueryDto,
+} from './dto/get-message-by-channel';
 import type { Request } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { ApiOperation, ApiResponse } from '@nestjs/swagger';
@@ -63,6 +66,21 @@ export class MessageController {
     @Query() dto: GetMessagesQueryDto,
   ) {
     return await this.messageService.getMessagesByChannel(channelSlug, dto);
+  }
+
+  @Get('workspaces/:slug/channels/:channelSlug/messages/around/:messageId')
+  async getMessagesAroundMessage(
+    @Param('slug') slug: string,
+    @Param('channelSlug') channelSlug: string,
+    @Param('messageId') messageId: string,
+    @Query() dto: GetJumpMessageQueryDto,
+  ) {
+    return this.messageService.getMessagesAroundMessage(
+      slug,
+      channelSlug,
+      messageId,
+      Number(dto.take),
+    );
   }
 
   @Get('workspaces/:slug/messages/recent')

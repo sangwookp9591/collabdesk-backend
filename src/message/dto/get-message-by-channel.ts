@@ -15,3 +15,11 @@ export class GetMessagesQueryDto {
   @Min(1)
   take?: number = 10;
 }
+
+export class GetJumpMessageQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  take?: number = 20;
+}
