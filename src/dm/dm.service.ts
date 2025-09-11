@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { GetMessagesQueryDto } from './dto/get-message-by-dm';
 import { SocketService } from '../socket/socket.service';
@@ -314,14 +314,6 @@ export class DmService {
     const cursor = dto?.cursor;
     const direction = dto.direction ?? 'prev';
 
-    this.logger.debug('DM 메세지 조회 page take : ', take);
-    const total = await this.prisma.message.count({
-      where: {
-        dmConversationId: conversationId,
-        parentId: null, //상위 메시지만
-      },
-    });
-
     const userFields = {
       id: true,
       email: true,
@@ -363,26 +355,296 @@ export class DmService {
       skip: cursor ? 1 : 0,
     });
 
-    this.logger.debug('DM 메세지 조회 : ', messages);
+    this.logger.debug('DM 메세지 조회 page take : ', take);
+    const total = await this.prisma.message.count({
+      where: {
+        dmConversationId: conversationId,
+        parentId: null, //상위 메시지만
+      },
+    });
+
+    // hasBefore, hasNext 확인을 위한 추가 쿼리
+    let hasPrev = false;
+    let hasNext = false;
+
+    if (messages.length > 0) {
+      const firstMessage = messages[0];
+      const lastMessage = messages[messages.length - 1];
+
+      // direction에 따라 정렬이 다르므로 실제 시간 기준으로 확인
+      const earliestMessage = direction === 'prev' ? lastMessage : firstMessage;
+      const latestMessage = direction === 'prev' ? firstMessage : lastMessage;
+
+      // 더 이전 메시지가 있는지 확인
+      const beforeCount = await this.prisma.message.count({
+        where: {
+          dmConversationId: conversationId,
+          parentId: null,
+          createdAt: { lt: earliestMessage.createdAt },
+        },
+        take: 1,
+      });
+      hasPrev = beforeCount > 0;
+
+      // 더 이후 메시지가 있는지 확인
+      const afterCount = await this.prisma.message.count({
+        where: {
+          dmConversationId: conversationId,
+          parentId: null,
+          createdAt: { gt: latestMessage.createdAt },
+        },
+        take: 1,
+      });
+      hasNext = afterCount > 0;
+    }
+
+    // 커서 설정
     let prevCursor: string | null = null;
     let nextCursor: string | null = null;
-    const hasMore = messages.length === take;
-    if (hasMore && messages.length > 0) {
+
+    if (messages.length > 0) {
       if (direction === 'prev') {
-        prevCursor = messages[messages.length - 1].id; // 더 오래된 메시지용
+        const orderedMessages = messages.reverse(); // 시간순으로 정렬
+        prevCursor = hasPrev ? orderedMessages[0].id : null; // 더 오래된 메시지용
+        nextCursor = hasNext
+          ? orderedMessages[orderedMessages.length - 1].id
+          : null;
       } else {
-        nextCursor = messages[0].id; // 더 최신 메시지용
+        prevCursor = hasPrev ? messages[0].id : null;
+        nextCursor = hasNext ? messages[messages.length - 1].id : null;
       }
     }
 
-    const orderedMessages = messages?.reverse();
+    const orderedMessages =
+      direction === 'prev' ? messages.reverse() : messages;
+
+    this.logger.debug('메시지 조회 완료', {
+      count: messages.length,
+      hasPrev,
+      hasNext,
+      direction,
+    });
+
     return {
       messages: orderedMessages,
       total,
-      hasMore,
+      hasMore: hasPrev || hasNext, // 전체적으로 더 있는지
+      hasPrev,
+      hasNext,
       prevCursor,
       nextCursor,
       direction,
+    };
+  }
+
+  async getMessagesAroundMessage(
+    conversationId: string,
+    messageId: string,
+    take: number = 20,
+  ) {
+    const halfLimit = Math.floor((take - 1) / 2); // 중심 메시지 제외하고 절반씩
+
+    // 워크스페이스와 채널 확인
+    const dMConversation = await this.prisma.dMConversation.findUnique({
+      where: {
+        id: conversationId,
+      },
+    });
+
+    if (!dMConversation) {
+      throw new NotFoundException('채널을 찾을 수 없습니다.');
+    }
+
+    const userFields = {
+      id: true,
+      email: true,
+      name: true,
+      status: true,
+      profileImageUrl: true,
+    };
+
+    // 1. 타겟 메시지 정보 가져오기
+    const targetMessage = await this.prisma.message.findFirst({
+      where: {
+        id: messageId,
+        dmConversationId: conversationId,
+        parentId: null, // 상위 메시지만
+      },
+      include: {
+        user: { select: userFields },
+        replies: {
+          include: { user: { select: userFields } },
+          orderBy: { createdAt: 'desc' },
+        },
+        mentions: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!targetMessage) {
+      throw new NotFoundException('메시지를 찾을 수 없습니다.');
+    }
+
+    // 2. 이전 메시지들 가져오기 (시간 기준)
+    const beforeMessages = await this.prisma.message.findMany({
+      where: {
+        dmConversationId: conversationId,
+        parentId: null,
+        createdAt: { lt: targetMessage.createdAt },
+      },
+      include: {
+        user: { select: userFields },
+        replies: {
+          include: { user: { select: userFields } },
+          orderBy: { createdAt: 'desc' },
+        },
+        mentions: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: halfLimit,
+    });
+
+    // 3. 이후 메시지들 가져오기 (시간 기준)
+    const afterMessages = await this.prisma.message.findMany({
+      where: {
+        dmConversationId: conversationId,
+        parentId: null,
+        createdAt: { gt: targetMessage.createdAt },
+      },
+      include: {
+        user: { select: userFields },
+        replies: {
+          include: { user: { select: userFields } },
+          orderBy: { createdAt: 'desc' },
+        },
+        mentions: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+      take: halfLimit,
+    });
+
+    // 4. 결합 및 시간순 정렬
+    const allMessages = [
+      ...beforeMessages.reverse(), // 시간순으로 뒤집기
+      targetMessage,
+      ...afterMessages,
+    ].sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+
+    // 5. hasBefore, hasNext 확인
+    const hasBefore = beforeMessages.length === halfLimit;
+    const hasNext = afterMessages.length === halfLimit;
+
+    // 실제로 더 이전/이후 메시지가 있는지 확인 (정확한 판단을 위해)
+    let actualHasBefore = hasBefore;
+    let actualHasNext = hasNext;
+
+    if (beforeMessages.length > 0) {
+      const beforeCount = await this.prisma.message.count({
+        where: {
+          dmConversationId: conversationId,
+          parentId: null,
+          createdAt: {
+            lt: beforeMessages[beforeMessages.length - 1].createdAt,
+          },
+        },
+        take: 1,
+      });
+      actualHasBefore = beforeCount > 0;
+    } else {
+      // 타겟 메시지보다 이전 메시지가 있는지 확인
+      const beforeCount = await this.prisma.message.count({
+        where: {
+          dmConversationId: conversationId,
+          parentId: null,
+          createdAt: { lt: targetMessage.createdAt },
+        },
+        take: 1,
+      });
+      actualHasBefore = beforeCount > 0;
+    }
+
+    if (afterMessages.length > 0) {
+      const afterCount = await this.prisma.message.count({
+        where: {
+          dmConversationId: conversationId,
+          parentId: null,
+          createdAt: { gt: afterMessages[afterMessages.length - 1].createdAt },
+        },
+        take: 1,
+      });
+      actualHasNext = afterCount > 0;
+    } else {
+      // 타겟 메시지보다 이후 메시지가 있는지 확인
+      const afterCount = await this.prisma.message.count({
+        where: {
+          dmConversationId: conversationId,
+          parentId: null,
+          createdAt: { gt: targetMessage.createdAt },
+        },
+        take: 1,
+      });
+      actualHasNext = afterCount > 0;
+    }
+
+    const total = await this.prisma.message.count({
+      where: {
+        dmConversationId: conversationId,
+        parentId: null,
+      },
+    });
+
+    this.logger.debug('주변 메시지 조회 완료', {
+      targetMessageId: messageId,
+      totalMessages: allMessages.length,
+      hasPrev: actualHasBefore,
+      hasNext: actualHasNext,
+    });
+
+    return {
+      messages: allMessages,
+      targetMessage,
+      total,
+      hasMore: actualHasBefore || actualHasNext,
+      hasPrev: actualHasBefore,
+      hasNext: actualHasNext,
+      prevCursor: actualHasBefore ? allMessages[0].id : null,
+      nextCursor: actualHasNext ? allMessages[allMessages.length - 1].id : null,
+      direction: 'around' as const,
     };
   }
 

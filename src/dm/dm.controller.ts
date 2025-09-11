@@ -81,6 +81,19 @@ export class DmController {
     return this.dmService.getDmMessages(conversationId, dto);
   }
 
+  @Get('conversations/:conversationId/messages/around/:messageId')
+  async getMessagesAroundMessage(
+    @Param('conversationId') conversationId: string,
+    @Param('messageId') messageId: string,
+    @Query() dto: GetMessagesQueryDto,
+  ) {
+    return this.dmService.getMessagesAroundMessage(
+      conversationId,
+      messageId,
+      Number(dto.take),
+    );
+  }
+
   @Post('conversations/:conversationId/messages')
   @HttpCode(HttpStatus.CREATED)
   @Throttle({ default: { limit: 60, ttl: 60000 } }) // 1분에 60개 메시지 제한
