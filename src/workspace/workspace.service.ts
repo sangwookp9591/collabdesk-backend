@@ -308,6 +308,14 @@ export class WorkspaceService {
         isRead: false,
         workspaceId: workspaceId,
       },
+      include: {
+        message: {
+          select: {
+            id: true,
+            content: true,
+          },
+        },
+      },
       orderBy: {
         createdAt: 'desc',
       },
