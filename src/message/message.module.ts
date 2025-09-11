@@ -8,7 +8,7 @@ import { SupabaseModule } from 'src/supabase/supabase.module';
 import { MailModule } from 'src/mail/mail.module';
 import { SocketModule } from 'src/socket/socket.module';
 import { WorkspaceModule } from 'src/workspace/workspace.module';
-import { NotificationQueue } from 'src/worker/notification/notification.queue';
+import { NotificationWorker } from 'src/worker/notification/notification.worker';
 @Module({
   imports: [
     PrismaModule,
@@ -20,7 +20,7 @@ import { NotificationQueue } from 'src/worker/notification/notification.queue';
     WorkspaceModule,
   ],
   controllers: [MessageController],
-  providers: [MessageService, NotificationQueue],
+  providers: [MessageService, NotificationWorker],
   exports: [MessageService],
 })
 export class MessageModule {}

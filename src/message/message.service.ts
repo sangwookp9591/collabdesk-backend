@@ -8,7 +8,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { GetMessagesQueryDto } from './dto/get-message-by-channel';
 import { MentionType, MessageType } from '@prisma/client';
 import { SocketService } from 'src/socket/socket.service';
-import { NotificationQueue } from 'src/worker/notification/notification.queue';
+import { NotificationWorker } from 'src/worker/notification/notification.worker';
 
 @Injectable()
 export class MessageService {
@@ -16,7 +16,7 @@ export class MessageService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly socketService: SocketService,
-    private readonly notificationQueue: NotificationQueue,
+    private readonly notificationWorker: NotificationWorker,
   ) {}
 
   async createMessage(
@@ -501,8 +501,9 @@ export class MessageService {
       roomType,
       mentions,
     );
-    // 후속 처리들 (트랜잭션 외부에서 실행)
 
+    this.logger.debug(' processMention mentions : ', mentions);
+    // 후속 처리들 (트랜잭션 외부에서 실행)
     const specialMention = mentions?.find(
       (item) => item.type === 'HERE' || item.type === 'EVERYONE',
     );
@@ -536,8 +537,9 @@ export class MessageService {
         },
       );
     }
+    this.logger.debug(' processMention usersIds : ', usersIds);
     if (usersIds && usersIds.length > 0) {
-      await this.notificationQueue.addJob('notification', {
+      await this.notificationWorker.addJob('notification', {
         workspaceId,
         userIds: usersIds,
         type: 'MENTION',

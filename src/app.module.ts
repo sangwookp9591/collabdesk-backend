@@ -18,6 +18,7 @@ import { SocketModule } from './socket/socket.module';
 import { InviteModule } from './invite/invite.module';
 import { DmModule } from './dm/dm.module';
 import { MentionModule } from './mention/mention.module';
+import { NotificationModule } from './notification/notification.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { MentionModule } from './mention/mention.module';
     InviteModule,
     DmModule,
     MentionModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
