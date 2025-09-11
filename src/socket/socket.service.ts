@@ -745,56 +745,71 @@ export class SocketService {
     lastReadMessageId: string,
   ) {
     const message = await this.prisma.message.findUnique({
-      where: {
-        id: lastReadMessageId,
-      },
+      where: { id: lastReadMessageId },
+      select: { id: true, createdAt: true },
     });
-    if (!message) {
-      return null;
-    }
+    if (!message) return null;
 
     if (roomType === 'channel') {
+      const member = await this.prisma.channelMember.findUnique({
+        where: { userId_channelId: { userId, channelId: roomId } },
+        select: { lastReadMessageId: true },
+      });
+
+      if (member?.lastReadMessageId) {
+        const currentMessage = await this.prisma.message.findUnique({
+          where: { id: member.lastReadMessageId },
+          select: { createdAt: true },
+        });
+
+        //  현재 읽은 메시지가 더 최신이면 업데이트 안 함
+        if (currentMessage && currentMessage.createdAt >= message.createdAt) {
+          return member.lastReadMessageId;
+        }
+      }
+
       await this.prisma.channelMember.update({
-        where: {
-          userId_channelId: { userId, channelId: roomId },
-        },
-        data: {
-          lastReadMessageId: lastReadMessageId,
-        },
+        where: { userId_channelId: { userId, channelId: roomId } },
+        data: { lastReadMessageId },
       });
     } else {
       const dMConversation = await this.prisma.dMConversation.findUnique({
-        where: {
-          id: roomId,
-        },
+        where: { id: roomId },
         select: {
           id: true,
           user1Id: true,
           user2Id: true,
+          user1LastReadMessageId: true,
+          user2LastReadMessageId: true,
         },
       });
-      if (dMConversation) {
-        if (dMConversation.user1Id === userId) {
-          await this.prisma.dMConversation.update({
-            where: {
-              id: dMConversation.id,
-            },
-            data: {
-              user1LastReadMessageId: lastReadMessageId,
-            },
-          });
-        } else {
-          await this.prisma.dMConversation.update({
-            where: {
-              id: dMConversation.id,
-            },
-            data: {
-              user2LastReadMessageId: lastReadMessageId,
-            },
-          });
+
+      if (!dMConversation) return null;
+
+      const isUser1 = dMConversation.user1Id === userId;
+      const currentId = isUser1
+        ? dMConversation.user1LastReadMessageId
+        : dMConversation.user2LastReadMessageId;
+
+      if (currentId) {
+        const currentMessage = await this.prisma.message.findUnique({
+          where: { id: currentId },
+          select: { createdAt: true },
+        });
+
+        if (currentMessage && currentMessage.createdAt >= message.createdAt) {
+          return currentId;
         }
       }
+
+      await this.prisma.dMConversation.update({
+        where: { id: dMConversation.id },
+        data: isUser1
+          ? { user1LastReadMessageId: lastReadMessageId }
+          : { user2LastReadMessageId: lastReadMessageId },
+      });
     }
+
     return lastReadMessageId;
   }
 
