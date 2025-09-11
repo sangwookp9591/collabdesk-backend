@@ -487,7 +487,7 @@ export class MessageService {
    * @param messageId 중심이 될 메시지 ID
    * @param limit 총 가져올 메시지 수 (중심 메시지 포함)
    */
-  async getMessagesAroundMessage(
+  async getMessagesAround(
     wsSlug: string,
     chSlug: string,
     messageId: string,

@@ -69,13 +69,13 @@ export class MessageController {
   }
 
   @Get('workspaces/:slug/channels/:channelSlug/messages/around/:messageId')
-  async getMessagesAroundMessage(
+  async getMessagesAround(
     @Param('slug') slug: string,
     @Param('channelSlug') channelSlug: string,
     @Param('messageId') messageId: string,
     @Query() dto: GetJumpMessageQueryDto,
   ) {
-    return this.messageService.getMessagesAroundMessage(
+    return this.messageService.getMessagesAround(
       slug,
       channelSlug,
       messageId,
