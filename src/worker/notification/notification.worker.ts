@@ -36,6 +36,7 @@ export class NotificationWorker implements OnModuleInit {
     );
 
     await this.worker.waitUntilReady();
+
     this.worker.on('completed', (job) => {
       this.logger.log(`Job ${job.id} completed`);
     });
@@ -53,39 +54,49 @@ export class NotificationWorker implements OnModuleInit {
 
   private async handleWorkspaceNotification(job: Job) {
     const message = job.data;
+    this.logger.debug('job ,message : ', message);
+
     const workspaceId = message?.workspaceId;
+    const messageId = message?.messageId;
     const userIds = message?.userIds ?? [];
+    const data = message?.data;
+    const type = message?.type;
+    const roomId = message?.roomId;
+    const roomType = message?.roomType;
 
-    if (!workspaceId || userIds.length === 0) return;
+    if (!workspaceId || userIds.length === 0 || !data) return;
 
-    const tx = userIds.map((userId: string) => {
-      const data = message.data;
-      if (data.type === 'MENTION' || data.type === 'NEW_MESSAGE') {
-        if (data.roomType === 'channel') {
+    // 조건에 맞는 프라미스만 배열에 담기
+    const tx = userIds.flatMap((userId: string) => {
+      if (type === 'MENTION' || type === 'NEW_MESSAGE') {
+        if (roomType === 'channel') {
           return this.prisma.notification.create({
             data: {
-              type: message.type,
+              type: type,
               userId,
               workspaceId,
-              channelId: data.roomId,
-              messageId: data.messageId,
+              channelId: roomId,
+              messageId: messageId,
             },
           });
         } else {
           return this.prisma.notification.create({
             data: {
-              type: message.type,
+              type: type,
               userId,
               workspaceId,
-              dmConversationId: data.roomId,
-              messageId: data.messageId,
+              dmConversationId: roomId,
+              messageId: messageId,
             },
           });
         }
       }
+      return []; // 조건 안 맞으면 빈 배열 반환
     });
 
-    await this.prisma.$transaction(tx);
+    if (tx.length > 0) {
+      await this.prisma.$transaction(tx);
+    }
   }
 
   private getRedisConfig() {
