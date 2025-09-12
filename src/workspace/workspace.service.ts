@@ -305,7 +305,6 @@ export class WorkspaceService {
     return await this.prisma.notification.findMany({
       where: {
         userId: userId,
-        isRead: false,
         workspaceId: workspaceId,
       },
       include: {
